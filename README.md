@@ -32,7 +32,7 @@ Both defended tiers beat naive by a margin this corpus can resolve. **The two
 defended tiers are not distinguishable from each other at n=66** — the paired
 difference is −1.5% [−9.1%, 6.1%], so reading 6.1% vs 7.6% as a ranking is
 reading noise. The structurally-grounded narrator never downgraded severity in
-its own voice, 0 of 66.
+its own voice, 0 of the 31 severity-downgrade payloads.
 
 **On a second model** (`meta/llama-3.1-8b-instruct`), the structural tier lands
 on the same 7.6% and again beats naive — but the prompt-hardened tier's
