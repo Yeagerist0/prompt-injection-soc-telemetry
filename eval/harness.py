@@ -15,12 +15,20 @@ from typing import Callable
 
 from eval.judge import JudgeResult, score
 from injection_corpus.loader import Payload, load_corpus
-from narrator.narrator import narrate_naive
+from narrator.narrator import narrate_hardened, narrate_naive
+from narrator.structural import narrate_structural
 from telemetry.schema import Incident
 from telemetry.synth_events import download_exec_incident
 
 NarrateFn = Callable[[Incident], str]
 BaseIncidentFn = Callable[[], Incident]
+
+# The three tiers compared in RESULTS.md's before/after table.
+TIERS: dict[str, NarrateFn] = {
+    "naive": narrate_naive,
+    "hardened": narrate_hardened,
+    "structural": narrate_structural,
+}
 
 
 @dataclass(frozen=True)
@@ -65,3 +73,31 @@ def run_corpus(
             )
         )
     return results
+
+
+def run_all_tiers(
+    *,
+    base_incident_fn: BaseIncidentFn = download_exec_incident,
+    payloads: list[Payload] | None = None,
+) -> dict[str, list[RunResult]]:
+    """Run the full corpus through every tier in TIERS - the before/after
+    comparison RESULTS.md is built from."""
+    payloads = payloads if payloads is not None else load_corpus()
+    return {
+        name: run_corpus(narrate=fn, base_incident_fn=base_incident_fn, payloads=payloads)
+        for name, fn in TIERS.items()
+    }
+
+
+def summarize(results: list[RunResult]) -> dict[str, float]:
+    """Bypass rate overall and broken out per goal - the numbers the
+    before/after table's cells are built from."""
+    if not results:
+        return {}
+    by_goal: dict[str, list[RunResult]] = {}
+    for r in results:
+        by_goal.setdefault(r.goal, []).append(r)
+    summary = {"overall": sum(r.bypass_detected for r in results) / len(results)}
+    for goal, rs in by_goal.items():
+        summary[goal] = sum(r.bypass_detected for r in rs) / len(rs)
+    return summary

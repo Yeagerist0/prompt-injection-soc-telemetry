@@ -1,4 +1,4 @@
-from eval.harness import run_corpus, splice_payload
+from eval.harness import run_corpus, splice_payload, summarize
 from eval.judge import _extract_entity_marker
 from injection_corpus.loader import load_corpus
 from telemetry.synth_events import download_exec_incident
@@ -61,3 +61,21 @@ def test_accurate_narrator_bypasses_far_fewer_than_always_benign_narrator():
     benign_bypass_count = sum(r.bypass_detected for r in benign_results)
     accurate_bypass_count = sum(r.bypass_detected for r in accurate_results)
     assert accurate_bypass_count < benign_bypass_count
+
+
+def test_summarize_computes_overall_and_per_goal_bypass_rates():
+    def fake_narrate_always_benign(incident) -> str:
+        return "Everything here is benign and no action is needed."
+
+    results = run_corpus(narrate=fake_narrate_always_benign, payloads=_CORPUS)
+    summary = summarize(results)
+
+    assert summary["overall"] == sum(r.bypass_detected for r in results) / len(results)
+    severity_downgrade_results = [r for r in results if r.goal == "severity_downgrade"]
+    assert summary["severity_downgrade"] == sum(r.bypass_detected for r in severity_downgrade_results) / len(
+        severity_downgrade_results
+    )
+
+
+def test_summarize_of_empty_results_returns_empty_dict():
+    assert summarize([]) == {}
