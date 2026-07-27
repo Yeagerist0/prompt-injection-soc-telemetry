@@ -25,6 +25,20 @@ Nothing here is estimated or fabricated in the meantime.
 ANTHROPIC_API_KEY=sk-... python -m eval.run_all
 ```
 
+## Dashboard
+
+```
+python -m eval.dashboard        # -> eval/results/dashboard.html
+```
+
+Self-contained HTML (no build step, no external requests): a payload-by-tier
+matrix of all 40 payloads grouped by attack category, tier bypass rates, and
+a per-attacker-goal breakdown. It reads the newest `eval/results/run_*.json`
+if one exists; until then the three result columns render as explicitly
+not-measured rather than as zeros or estimates, while the rest of the page
+(payload ids, techniques, goals, category to field mapping) is real data read
+straight from the corpus.
+
 ## Layout
 
 ```
@@ -32,6 +46,7 @@ telemetry/          typed EDR-style event/incident schema + synthetic incident g
 injection_corpus/   40 payloads across 4 categories + a validating loader
 narrator/           three narrator tiers (naive / hardened / structurally-grounded)
 eval/               splices payloads into incidents, runs a narrator tier, scores bypasses
+                    + dashboard.py, a self-contained HTML view of the results
 docs/               ARCHITECTURE.md, THREAT_MODEL.md, RESULTS.md
 ```
 
