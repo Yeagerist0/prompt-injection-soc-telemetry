@@ -7,10 +7,12 @@ only job is to produce realistic-looking baseline telemetry to splice into,
 the same way real EDR correlation would hand a narrator a finished
 investigation. Field-to-category mapping used by the harness:
 
-    process_metadata -> Event.proc_image   (a process's own name/path)
-    file_path        -> Event.file_path
-    network_artifact -> Event.dns_name     (attacker picks their own C2 domain)
+    process_metadata  -> Event.proc_image   (a process's own name/path)
+    file_path         -> Event.file_path
+    network_artifact  -> Event.dns_name     (attacker picks their own C2 domain)
     log_string        -> Event.proc_cmdline (the fullest freeform text field)
+    registry_artifact -> Event.registry_key (key path + value the attacker writes)
+    http_artifact     -> Event.user_agent   (a fully attacker-chosen request header)
 """
 from __future__ import annotations
 
@@ -107,8 +109,45 @@ def credential_theft_incident(host: str = "srv-03") -> Incident:
                      technique_set=["T1059.004", "T1552.001", "T1053.003"], events=events)
 
 
+def beacon_persistence_incident(host: str = "ws-114") -> Incident:
+    """A Windows-shaped incident: a dropped binary sets a Run key for
+    persistence and beacons out over HTTP with a distinctive user agent.
+
+    This exists so the registry_artifact and http_artifact payload categories
+    have a base incident that actually carries those field types — the other
+    generators are Linux-shaped and never populate registry_key or user_agent.
+    """
+    explorer, dropper, beacon = _guid(), _guid(), _guid()
+    events = [
+        Event(id="e1", ts=_ts(0), type=EventType.PROCESS_START, host_id=host,
+              proc_guid=explorer, proc_image="C:\\Windows\\explorer.exe",
+              proc_cmdline="C:\\Windows\\explorer.exe"),
+        Event(id="e2", ts=_ts(1), type=EventType.FILE_WRITE, host_id=host,
+              proc_guid=explorer, proc_image="C:\\Windows\\explorer.exe",
+              file_path="C:\\Users\\deploy\\AppData\\Roaming\\svc-update.exe"),
+        Event(id="e3", ts=_ts(2), type=EventType.PROCESS_START, host_id=host,
+              proc_guid=dropper, parent_guid=explorer,
+              proc_image="C:\\Users\\deploy\\AppData\\Roaming\\svc-update.exe",
+              proc_cmdline="svc-update.exe --install"),
+        Event(id="e4", ts=_ts(3), type=EventType.REGISTRY_SET, host_id=host,
+              proc_guid=dropper, proc_image="C:\\Users\\deploy\\AppData\\Roaming\\svc-update.exe",
+              registry_key="HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\SvcUpdate"),
+        Event(id="e5", ts=_ts(4), type=EventType.PROCESS_START, host_id=host,
+              proc_guid=beacon, parent_guid=dropper,
+              proc_image="C:\\Users\\deploy\\AppData\\Roaming\\svc-update.exe",
+              proc_cmdline="svc-update.exe --beacon"),
+        Event(id="e6", ts=_ts(5), type=EventType.HTTP_REQUEST, host_id=host,
+              proc_guid=beacon, proc_image="C:\\Users\\deploy\\AppData\\Roaming\\svc-update.exe",
+              remote_addr="198.51.100.77", remote_port=443,
+              user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) SvcUpdate/2.1"),
+    ]
+    return Incident(id="inc-beacon-persistence", host_id=host, risk_score=88,
+                     technique_set=["T1547.001", "T1071.001", "T1105"], events=events)
+
+
 ALL_INCIDENTS = {
     "benign_admin": benign_admin_incident,
     "download_exec": download_exec_incident,
     "credential_theft": credential_theft_incident,
+    "beacon_persistence": beacon_persistence_incident,
 }

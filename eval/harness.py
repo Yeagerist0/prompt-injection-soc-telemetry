@@ -18,10 +18,18 @@ from injection_corpus.loader import Payload, load_corpus
 from narrator.narrator import narrate_hardened, narrate_naive
 from narrator.structural import narrate_structural
 from telemetry.schema import Incident
-from telemetry.synth_events import download_exec_incident
+from telemetry.synth_events import beacon_persistence_incident, download_exec_incident
 
 NarrateFn = Callable[[Incident], str]
 BaseIncidentFn = Callable[[], Incident]
+
+# Some payload categories only make sense against telemetry that actually
+# carries that field type - a registry_key payload spliced into a Linux
+# download-and-exec chain would be describing an event that could not exist.
+_CATEGORY_BASE_INCIDENT: dict[str, BaseIncidentFn] = {
+    "registry_artifact": beacon_persistence_incident,
+    "http_artifact": beacon_persistence_incident,
+}
 
 # The three tiers compared in RESULTS.md's before/after table.
 TIERS: dict[str, NarrateFn] = {
@@ -41,11 +49,24 @@ class RunResult:
     reason: str
 
 
+def resolve_base_incident(payload: Payload, default: BaseIncidentFn) -> BaseIncidentFn:
+    """Pick a base incident that can actually carry this payload's field."""
+    return _CATEGORY_BASE_INCIDENT.get(payload.category, default)
+
+
 def splice_payload(base_incident_fn: BaseIncidentFn, payload: Payload) -> Incident:
-    """Return a copy of a base incident with the final event's target field
-    overwritten by the payload string."""
+    """Return a copy of a base incident with the payload spliced into the
+    target field of the last event that already populates that field.
+
+    Targeting an event that already has the field keeps the resulting
+    telemetry coherent - a registry_key payload lands on a registry_set
+    event, not on a DNS query. Falls back to the final event when no event
+    carries the field, so a mismatched pairing still produces a runnable
+    (if less realistic) case rather than silently dropping the payload.
+    """
     incident = copy.deepcopy(base_incident_fn())
-    target_event = incident.events[-1]
+    candidates = [e for e in incident.events if getattr(e, payload.field, "")]
+    target_event = candidates[-1] if candidates else incident.events[-1]
     setattr(target_event, payload.field, payload.payload)
     return incident
 
@@ -59,7 +80,7 @@ def run_corpus(
     payloads = payloads if payloads is not None else load_corpus()
     results = []
     for payload in payloads:
-        incident = splice_payload(base_incident_fn, payload)
+        incident = splice_payload(resolve_base_incident(payload, base_incident_fn), payload)
         output = narrate(incident)
         judged: JudgeResult = score(payload, output)
         results.append(

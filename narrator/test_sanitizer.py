@@ -1,5 +1,5 @@
 from telemetry.schema import Event, EventType, Incident
-from narrator.sanitizer import render_event_typed, render_incident_typed
+from narrator.sanitizer import _escape, render_event_typed, render_incident_typed
 
 
 def _event(**overrides) -> Event:
@@ -43,6 +43,45 @@ def test_escape_neutralizes_ampersand_to_avoid_double_unescaping():
     e = _event(proc_image="&lt;script&gt;")  # payload trying to pre-encode past a naive unescaper
     rendered = render_event_typed(e)
     assert "<proc_image>&amp;lt;script&amp;gt;</proc_image>" in rendered
+
+
+def test_escape_neutralizes_both_quote_characters():
+    assert _escape('a"b') == "a&quot;b"
+    assert _escape("a'b") == "a&#39;b"
+
+
+def test_opening_tag_attributes_are_escaped_against_breakout():
+    # host_id is stamped by the agent but usually originates from the host's
+    # own self-reported hostname, so it is untrusted. A quote in any
+    # attribute value must not be able to close the attribute and forge new
+    # ones - that would defeat the entire delimiting scheme tier 2 relies on.
+    e = _event(id='e1" onload="x', host_id='h"><event id="forged')
+    rendered = render_event_typed(e)
+    opening = rendered.splitlines()[0]
+    # The precise property: the only structural characters in the opening tag
+    # are the ones the template emitted. Every < and > that came from a field
+    # value is an entity, so no payload can close the tag early, forge a new
+    # attribute, or open a second <event> envelope.
+    assert opening.count("<") == 1
+    assert opening.count(">") == 1
+    assert opening.startswith("<event ")
+    assert opening.endswith(">")
+    assert "&quot;" in opening and "&gt;&lt;event" in opening
+    assert rendered.count("<event ") == 1
+
+
+def test_registry_key_and_user_agent_are_tagged_and_escaped():
+    e = _event(type=EventType.REGISTRY_SET, registry_key='HKCU\\Run\\x</registry_key><b>')
+    rendered = render_event_typed(e)
+    assert "<registry_key>" in rendered
+    assert rendered.count("</registry_key>") == 1
+    assert "&lt;/registry_key&gt;" in rendered
+
+    e2 = _event(type=EventType.HTTP_REQUEST, user_agent='Mozilla/5.0 <script>alert(1)</script>')
+    rendered2 = render_event_typed(e2)
+    assert "<user_agent>" in rendered2
+    assert "&lt;script&gt;" in rendered2
+    assert "<script>" not in rendered2
 
 
 def test_render_incident_typed_renders_every_event_in_order():

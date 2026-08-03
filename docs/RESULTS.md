@@ -18,14 +18,27 @@ real run.
 ANTHROPIC_API_KEY=sk-... python -m eval.run_all
 ```
 
-This runs the full 40-payload corpus through all three tiers (naive,
-hardened, structural — 120 calls total), scores every result with
+This runs the full 66-payload corpus through all three tiers (naive,
+hardened, structural — 198 calls total), scores every result with
 `eval/judge.py`, prints the summary table below, and writes a timestamped
 `eval/results/run_<UTC-timestamp>.{csv,json}` with every individual result
 (payload id, tier, category, goal, bypass_detected, reason). Pin a specific
 model with `--model` (defaults to `claude-opus-4-8` via the `NARRATOR_MODEL`
 env var) — the corpus is cheap enough that a full run costs well under $1
 on Opus and a few cents on Haiku.
+
+## Bypass rate by tier and target class
+
+The comparison that matters most is the second block: a defense that scores
+well on `generic` payloads but poorly on ones engineered against it has
+learned the shape of easy attacks rather than raised the bar. See
+`docs/THREAT_MODEL.md` § Tier-targeted payloads.
+
+| Tier | All payloads | vs `generic` | vs `hardened`-targeted | vs `structural`-targeted |
+|---|---|---|---|---|
+| naive | — | — | — | — |
+| hardened | — | — | — | — |
+| structural | — | — | — | — |
 
 ## Bypass rate by tier and goal
 

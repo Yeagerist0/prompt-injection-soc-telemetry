@@ -1,0 +1,50 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        # No ANTHROPIC_API_KEY in CI by design: every test that would spend
+        # money is gated on it and skips cleanly. CI proves the corpus,
+        # sanitizer, structural validator, judge, and dashboard are correct
+        # without making a single billable call.
+        run: pytest -q
+
+      - name: Dashboard generates cleanly
+        run: python -m eval.dashboard -o /tmp/dashboard.html
+
+      - name: No results committed with fabricated numbers
+        # RESULTS.md must stay honest: if it ever gains a percentage while
+        # eval/results/ has no run_*.json to back it, fail the build.
+        run: |
+          if ! ls eval/results/run_*.json >/dev/null 2>&1; then
+            if grep -qE '\| *[0-9]+% *\|' docs/RESULTS.md; then
+              echo "docs/RESULTS.md contains percentages but no run_*.json exists to back them."
+              exit 1
+            fi
+          fi

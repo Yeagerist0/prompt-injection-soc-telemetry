@@ -2,10 +2,10 @@
 tier and write results to eval/results/.
 
 This is the only piece of the project that costs money - each tier makes
-real Claude API calls (40 payloads x 3 tiers = 120 short calls total, well
+real Claude API calls (66 payloads x 3 tiers = 198 short calls total, well
 under $1 even on Opus, pennies on Haiku). Everything else (corpus, harness,
-judge, all three narrator tiers) is already built and unit-tested against
-fixture narrators with no API access required.
+judge, all three narrator tiers, dashboard) is already built and unit-tested
+against fixture narrators with no API access required.
 
 Usage:
     ANTHROPIC_API_KEY=sk-... python -m eval.run_all
@@ -28,13 +28,47 @@ RESULTS_DIR = Path(__file__).parent / "results"
 _GOALS = ("severity_downgrade", "entity_omission", "instruction_leak")
 
 
+# Leading characters that make Excel / LibreOffice / Sheets treat a cell as a
+# formula. Every string column in this export carries attacker-authored text
+# (payload ids come from the corpus YAML; judge reasons quote payload-derived
+# entity markers verbatim), so the export is a genuine injection sink.
+_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value: object) -> object:
+    """Neutralize spreadsheet formula injection in a CSV cell.
+
+    Prefixes a single quote to any string that would otherwise be parsed as
+    a formula on open. Non-strings pass through untouched. This project's
+    whole subject is untrusted strings reaching a consumer that interprets
+    them - shipping a results export that hands `=cmd|'/C calc'!A0` to the
+    analyst's spreadsheet would be the same bug one layer down.
+    """
+    if isinstance(value, str) and value.startswith(_FORMULA_TRIGGERS):
+        return "'" + value
+    return value
+
+
 def write_csv(path: Path, all_results: dict[str, list[RunResult]]) -> None:
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["tier", "payload_id", "category", "goal", "bypass_detected", "reason"])
+        writer.writerow(
+            ["tier", "payload_id", "category", "goal", "bypass_detected", "reason", "narrator_output"]
+        )
         for tier, results in all_results.items():
             for r in results:
-                writer.writerow([tier, r.payload_id, r.category, r.goal, r.bypass_detected, r.reason])
+                writer.writerow(
+                    csv_safe(v)
+                    for v in (
+                        tier,
+                        r.payload_id,
+                        r.category,
+                        r.goal,
+                        r.bypass_detected,
+                        r.reason,
+                        r.narrator_output,
+                    )
+                )
 
 
 def write_json(
@@ -70,8 +104,9 @@ def main(argv: list[str] | None = None) -> int:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print(
             "ANTHROPIC_API_KEY is not set - every tier makes real Claude API calls.\n"
-            "Set it, or run `ant auth login` first if you have Claude Code / Claude "
-            "Pro-Max OAuth access instead of a metered key, then re-run this command.",
+            "Set it, or run `ant auth login` to authenticate via an OAuth profile\n"
+            "instead. Either way the calls bill against Console API credit: a\n"
+            "Claude.ai Pro/Max chat subscription does not include API usage.",
             file=sys.stderr,
         )
         return 1

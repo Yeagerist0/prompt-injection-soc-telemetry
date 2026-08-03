@@ -5,9 +5,10 @@
 ```
 Incident (telemetry/schema.py)
    |
-   |  (eval harness splices one injection_corpus payload into
-   |   the final event's target field: proc_image / file_path /
-   |   dns_name / proc_cmdline)
+   |  (eval harness picks a base incident that can carry the
+   |   payload's field, then splices the payload into the last
+   |   event that already populates it: proc_image / file_path /
+   |   dns_name / proc_cmdline / registry_key / user_agent)
    v
 narrate_* (one of three tiers, narrator/)
    |
@@ -35,16 +36,19 @@ eval/harness.py::RunResult  ->  eval/run_all.py  ->  eval/results/*.{csv,json}
   independently of the narrator, never asked of the LLM). `Event.as_line()`
   is the deliberately naive, unescaped serialization the tier-1 narrator
   uses.
-- `synth_events.py` — three synthetic incident generators
+- `synth_events.py` — four synthetic incident generators
   (`benign_admin_incident`, `download_exec_incident`,
-  `credential_theft_incident`) that stand in for what a real detection
+  `credential_theft_incident`, `beacon_persistence_incident` — the last is
+  Windows-shaped so the registry and HTTP payload categories have telemetry
+  that actually carries those fields) that stand in for what a real detection
   engine would hand off to a narrator. Documents the corpus's
   category → field mapping.
 
 ### `injection_corpus/`
 
-- `payloads.yaml` — 40 payloads, 10 per category, each with `id`,
-  `category`, `field`, `technique`, `payload`, `goal`. See
+- `payloads.yaml` — 66 payloads across six categories, each with `id`,
+  `category`, `field`, `technique`, `payload`, `goal`, and an optional
+  `tier_target` marking which defense it is engineered against. See
   `docs/THREAT_MODEL.md` for the design rationale.
 - `loader.py` — `load_corpus()` parses and validates the YAML (raises
   loudly on any malformed/duplicate/mismatched entry — a corrupted entry
@@ -90,18 +94,26 @@ model for a full corpus run without touching code.
   rather than LLM-as-judge specifically so the same (payload, output) pair
   always scores the same way — reproducibility matters more here than a
   smarter judge would help.
-- `harness.py` — `splice_payload` (puts one payload into a fresh copy of a
-  base incident), `run_corpus` (runs the full corpus through one
+- `harness.py` — `resolve_base_incident` (routes a category to an incident
+  shape that carries its field), `splice_payload` (puts one payload into a
+  fresh copy of that base incident, targeting the last event that already
+  populates the field so the telemetry stays coherent), `run_corpus` (runs the full corpus through one
   injectable narrator, scores every result), `TIERS` (name → narrate
   function registry), `run_all_tiers` (runs the corpus through all three
   tiers), `summarize` (bypass rate overall and per goal — the numbers
   `RESULTS.md`'s table cells come from).
-- `run_all.py` — CLI entry point (`python -m eval.run_all`). Requires
-  `ANTHROPIC_API_KEY`; everything upstream of it is unit-tested without
+- `run_all.py` — CLI entry point (`python -m eval.run_all`), plus
+  `csv_safe` which neutralizes spreadsheet formula injection in the export
+  (see `docs/SECURITY.md` finding 2). Requires `ANTHROPIC_API_KEY`; everything upstream of it is unit-tested without
   needing the API (fixture narrators stand in for the real Claude calls in
   `eval/test_harness.py`).
+- `dashboard.py` — generates the self-contained HTML view. `render_page`
+  is pure and fully unit-tested; `safe_json_for_script` is the escaping
+  that keeps hostile payload text from terminating the page's JSON data
+  island (see `docs/SECURITY.md` finding 3).
 - `results/` — versioned per commit: each real run of `run_all.py` writes
-  a timestamped `run_<UTC-timestamp>.csv` and `.json` here.
+  a timestamped `run_<UTC-timestamp>.csv` and `.json` here, alongside the
+  generated `dashboard.html`.
 
 ## Testing philosophy
 

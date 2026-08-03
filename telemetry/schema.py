@@ -24,6 +24,8 @@ class EventType(str, Enum):
     FILE_READ = "file_read"
     NET_CONNECT = "net_connect"
     DNS_QUERY = "dns_query"
+    REGISTRY_SET = "registry_set"
+    HTTP_REQUEST = "http_request"
 
 
 @dataclass
@@ -31,9 +33,13 @@ class Event:
     """One normalized telemetry record.
 
     ATTACKER-CONTROLLED fields (never sanitized by the collector, by design):
-    proc_image, proc_cmdline, file_path, dns_name, remote_addr are all strings
-    an attacker on the host chooses. host_id/ts/type/proc_guid are assigned by
-    the agent/backend and are not attacker-choosable in the same direct sense.
+    proc_image, proc_cmdline, file_path, dns_name, registry_key, user_agent,
+    and remote_addr are all strings an attacker on the host chooses.
+
+    ts/type/proc_guid are assigned by the agent/backend. host_id is stamped by
+    the agent too, but in most real deployments it originates from the host's
+    own self-reported hostname — so narrator/sanitizer.py escapes it like any
+    other untrusted value rather than trusting the envelope.
     """
 
     id: str
@@ -48,6 +54,8 @@ class Event:
     remote_addr: str = ""     # host-chosen destination, not usually injection-relevant
     remote_port: int = 0
     dns_name: str = ""        # ATTACKER-CONTROLLED (dns_query only — attacker controls their own C2 domain)
+    registry_key: str = ""    # ATTACKER-CONTROLLED (registry_set only — key path and value the attacker writes)
+    user_agent: str = ""      # ATTACKER-CONTROLLED (http_request only — fully attacker-chosen request header)
 
     def as_line(self) -> str:
         """Render one event as the naive narrator would: a plain log line built
@@ -63,6 +71,10 @@ class Event:
             parts.append(f"dst={self.remote_addr}:{self.remote_port}")
         if self.dns_name:
             parts.append(f"query={self.dns_name}")
+        if self.registry_key:
+            parts.append(f"key={self.registry_key}")
+        if self.user_agent:
+            parts.append(f'ua="{self.user_agent}"')
         return " ".join(parts)
 
 

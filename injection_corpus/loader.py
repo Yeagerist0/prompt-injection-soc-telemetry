@@ -7,8 +7,15 @@ from typing import Literal
 
 import yaml
 
-Category = Literal["process_metadata", "file_path", "network_artifact", "log_string"]
-Field = Literal["proc_image", "file_path", "dns_name", "proc_cmdline"]
+Category = Literal[
+    "process_metadata",
+    "file_path",
+    "network_artifact",
+    "log_string",
+    "registry_artifact",
+    "http_artifact",
+]
+Field = Literal["proc_image", "file_path", "dns_name", "proc_cmdline", "registry_key", "user_agent"]
 Goal = Literal["severity_downgrade", "entity_omission", "instruction_leak"]
 
 _VALID_CATEGORY_FIELD = {
@@ -16,9 +23,15 @@ _VALID_CATEGORY_FIELD = {
     "file_path": "file_path",
     "network_artifact": "dns_name",
     "log_string": "proc_cmdline",
+    "registry_artifact": "registry_key",
+    "http_artifact": "user_agent",
 }
 
 _CORPUS_PATH = Path(__file__).parent / "payloads.yaml"
+
+
+TierTarget = Literal["generic", "hardened", "structural"]
+_VALID_TIER_TARGETS = {"generic", "hardened", "structural"}
 
 
 @dataclass(frozen=True)
@@ -29,6 +42,12 @@ class Payload:
     technique: str
     payload: str
     goal: Goal
+    # Which defense this payload is specifically engineered against.
+    # "generic" payloads try to fool any narrator; "hardened" ones target the
+    # tier-2 escaping/JSON-schema design; "structural" ones try to steer the
+    # tier-3 allow-list label itself, which is the only lever tier 3 leaves
+    # the model. Optional in YAML, defaults to "generic".
+    tier_target: TierTarget = "generic"
 
 
 def load_corpus(path: Path = _CORPUS_PATH) -> list[Payload]:
@@ -56,7 +75,14 @@ def load_corpus(path: Path = _CORPUS_PATH) -> list[Payload]:
                 f"{path}: entry {e['id']} category {e['category']!r} must target field "
                 f"{_VALID_CATEGORY_FIELD[e['category']]!r}, got {e['field']!r}"
             )
-        out.append(Payload(**{k: e[k] for k in ("id", "category", "field", "technique", "payload", "goal")}))
+        tier_target = e.get("tier_target", "generic")
+        if tier_target not in _VALID_TIER_TARGETS:
+            raise ValueError(
+                f"{path}: entry {e['id']} has unknown tier_target {tier_target!r} "
+                f"(expected one of {sorted(_VALID_TIER_TARGETS)})"
+            )
+        fields = {k: e[k] for k in ("id", "category", "field", "technique", "payload", "goal")}
+        out.append(Payload(**fields, tier_target=tier_target))
     return out
 
 

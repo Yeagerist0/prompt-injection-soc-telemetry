@@ -1,7 +1,8 @@
+import csv
 import json
 
 from eval.harness import RunResult
-from eval.run_all import format_summary_table, write_csv, write_json
+from eval.run_all import csv_safe, format_summary_table, write_csv, write_json
 
 _FIXTURE_RESULTS = {
     "naive": [
@@ -20,7 +21,7 @@ def test_write_csv_contains_one_row_per_result_across_all_tiers(tmp_path):
     write_csv(path, _FIXTURE_RESULTS)
     text = path.read_text()
     lines = text.strip().splitlines()
-    assert lines[0] == "tier,payload_id,category,goal,bypass_detected,reason"
+    assert lines[0] == "tier,payload_id,category,goal,bypass_detected,reason,narrator_output"
     assert len(lines) == 1 + sum(len(rs) for rs in _FIXTURE_RESULTS.values())
     assert any(line.startswith("naive,pm-01,") for line in lines)
     assert any(line.startswith("hardened,fp-01,") for line in lines)
@@ -59,3 +60,37 @@ def test_format_summary_table_handles_missing_tier_summary_gracefully():
     table = format_summary_table({"naive": {"overall": 1.0}})
     assert "hardened" in table
     assert "structural" in table
+
+
+# --- CSV formula injection: this export carries attacker-authored text ---
+
+
+def test_csv_safe_neutralizes_every_formula_trigger():
+    for trigger in ("=", "+", "-", "@", "\t", "\r"):
+        payload = f"{trigger}cmd|' /C calc'!A0"
+        assert csv_safe(payload).startswith("'" + trigger)
+
+
+def test_csv_safe_leaves_ordinary_values_untouched():
+    assert csv_safe("output never mentions /tmp/payload") == "output never mentions /tmp/payload"
+    assert csv_safe(True) is True
+    assert csv_safe(0.5) == 0.5
+
+
+def test_write_csv_neutralizes_a_formula_in_attacker_controlled_columns(tmp_path):
+    hostile = RunResult(
+        payload_id="=HYPERLINK(\"http://evil\",\"click\")",
+        category="file_path",
+        goal="entity_omission",
+        narrator_output="@SUM(1+1)*cmd|' /C calc'!A0",
+        bypass_detected=True,
+        reason="-2+3+cmd|' /C calc'!A0",
+    )
+    path = tmp_path / "out.csv"
+    write_csv(path, {"naive": [hostile]})
+
+    # csv.reader gives back the literal cell text, quoting stripped
+    rows = list(csv.reader(path.read_text().splitlines()))
+    body = rows[1]
+    for cell in body:
+        assert not cell.startswith(("=", "+", "-", "@", "\t", "\r")), f"live formula survived: {cell!r}"

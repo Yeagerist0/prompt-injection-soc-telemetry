@@ -65,6 +65,8 @@ _TEMPLATES: dict[EventType, str] = {
     EventType.FILE_READ: "[{ts}] file read on {host_id}: {file_path}",
     EventType.NET_CONNECT: "[{ts}] network connection from {host_id} to {remote_addr}:{remote_port}",
     EventType.DNS_QUERY: "[{ts}] DNS query from {host_id}: {dns_name}",
+    EventType.REGISTRY_SET: "[{ts}] registry value set on {host_id}: {registry_key}",
+    EventType.HTTP_REQUEST: "[{ts}] HTTP request from {host_id} to {remote_addr}:{remote_port} (user-agent: {user_agent})",
 }
 
 
@@ -81,6 +83,8 @@ def render_event_line(event: Event, kind: ObservationKind) -> str:
         remote_addr=event.remote_addr,
         remote_port=event.remote_port,
         dns_name=event.dns_name,
+        registry_key=event.registry_key,
+        user_agent=event.user_agent,
     )
     return f"- [{kind.value}] {line}"
 
@@ -90,15 +94,36 @@ def validate_classifications(incident: Incident, raw_classifications: list[dict]
     ObservationKind mapping. Anything not traceable to a real event id in
     this incident, or not one of the allow-listed kind values, is dropped -
     it never reaches the rendered report. Missing/dropped entries are
-    filled with UNCLASSIFIED by the caller, not here."""
+    filled with UNCLASSIFIED by the caller, not here.
+
+    Duplicate event_ids are rejected rather than last-write-wins: a response
+    that classifies the same event twice is malformed, and silently keeping
+    one of the two would let a trailing entry override an earlier one. Both
+    are discarded so the event falls through to UNCLASSIFIED, which is the
+    safe direction (it stays visible and unendorsed, rather than inheriting
+    whichever label happened to come last).
+    """
     valid_ids = {e.id for e in incident.events}
     valid_kinds = {k.value for k in ObservationKind}
+
+    seen: set[str] = set()
+    duplicated: set[str] = set()
     validated: dict[str, ObservationKind] = {}
     for entry in raw_classifications:
+        if not isinstance(entry, dict):
+            continue
         event_id = entry.get("event_id")
         kind_str = entry.get("kind")
-        if event_id in valid_ids and kind_str in valid_kinds:
-            validated[event_id] = ObservationKind(kind_str)
+        if event_id not in valid_ids or kind_str not in valid_kinds:
+            continue
+        if event_id in seen:
+            duplicated.add(event_id)
+            continue
+        seen.add(event_id)
+        validated[event_id] = ObservationKind(kind_str)
+
+    for event_id in duplicated:
+        validated.pop(event_id, None)
     return validated
 
 

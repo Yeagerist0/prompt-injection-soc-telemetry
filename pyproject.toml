@@ -1,3 +1,32 @@
+[project]
+name = "prompt-injection-soc-telemetry"
+version = "0.2.0"
+description = "Indirect prompt injection via attacker-controlled SOC/EDR telemetry, and three narrator defense tiers measured against it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "anthropic>=0.40",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+pi-eval = "eval.run_all:main"
+pi-dashboard = "eval.dashboard:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["telemetry", "injection_corpus", "narrator", "narrator.prompts", "eval"]
+
+[tool.setuptools.package-data]
+injection_corpus = ["*.yaml"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["telemetry", "injection_corpus", "narrator", "eval"]

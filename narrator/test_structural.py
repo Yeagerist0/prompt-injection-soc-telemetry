@@ -65,6 +65,41 @@ def test_validate_classifications_ignores_malformed_entries_missing_keys():
     assert result == {}
 
 
+def test_validate_classifications_rejects_duplicate_event_ids_entirely():
+    # A response that classifies the same event twice is malformed. Keeping
+    # either one would let a trailing entry override an earlier one, so both
+    # are dropped and the event falls through to UNCLASSIFIED.
+    incident = _incident_with_ids("e1", "e2")
+    result = validate_classifications(
+        incident,
+        [
+            {"event_id": "e1", "kind": "malicious_activity"},
+            {"event_id": "e1", "kind": "routine_administration"},
+            {"event_id": "e2", "kind": "file_activity"},
+        ],
+    )
+    assert "e1" not in result
+    assert result == {"e2": ObservationKind.FILE_ACTIVITY}
+
+
+def test_validate_classifications_ignores_non_dict_entries():
+    incident = _incident_with_ids("e1")
+    result = validate_classifications(incident, ["not-a-dict", None, 42])
+    assert result == {}
+
+
+def test_render_event_line_supports_registry_and_http_events():
+    reg = _event(type=EventType.REGISTRY_SET, registry_key="HKCU\\Software\\Run\\SvcUpdate")
+    assert "registry value set" in render_event_line(reg, ObservationKind.SUSPICIOUS_ACTIVITY)
+    assert "SvcUpdate" in render_event_line(reg, ObservationKind.SUSPICIOUS_ACTIVITY)
+
+    http = _event(type=EventType.HTTP_REQUEST, remote_addr="198.51.100.77", remote_port=443,
+                  user_agent="SvcUpdate/2.1")
+    line = render_event_line(http, ObservationKind.NETWORK_COMMUNICATION)
+    assert "HTTP request" in line
+    assert "SvcUpdate/2.1" in line
+
+
 def test_render_structural_report_includes_every_event_even_if_unclassified():
     # An event the model never classified (or whose classification was
     # dropped by validation) must still appear in the final report - it
