@@ -26,10 +26,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
+import sys
 import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -106,6 +109,34 @@ def _schema_of(output_config: dict[str, Any] | None) -> dict[str, Any] | None:
     return (output_config.get("format") or {}).get("schema")
 
 
+@contextmanager
+def _hard_deadline(seconds: float):
+    """Enforce a total wall-clock deadline on a request.
+
+    urllib's `timeout` applies per socket operation, not to the request as a
+    whole, so a connection that stalls mid-body can hang forever. A hung run
+    is worse than a failed one: it produces silence, and silence is
+    indistinguishable from slow progress. SIGALRM gives a hard ceiling.
+
+    Only arms in the main thread of a platform that has SIGALRM; elsewhere it
+    is a no-op and the per-socket timeout is the only guard.
+    """
+    if not hasattr(signal, "SIGALRM") or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def _fire(_signum, _frame):
+        raise TimeoutError(f"request exceeded {seconds:.0f}s hard deadline")
+
+    previous = signal.signal(signal.SIGALRM, _fire)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def _post_json(url: str, headers: dict[str, str], body: dict[str, Any]) -> dict[str, Any]:
     request = urllib.request.Request(
         url,
@@ -149,7 +180,9 @@ class _OpenAICompatMessages:
             ]
 
         last_error: Exception | None = None
+        attempted_schema_modes = 0
         for response_format in attempts:
+            attempted_schema_modes += 1
             payload_messages = chat_messages
             if schema is not None and (response_format is None or response_format["type"] == "json_object"):
                 payload_messages = self._with_schema_instruction(chat_messages, schema)
@@ -168,7 +201,11 @@ class _OpenAICompatMessages:
                 continue
             return Response(content=[TextBlock(text=extract_json(text) if schema else text)])
 
-        raise BackendError(f"every structured-output mode was rejected by {self._client.base_url}: {last_error}")
+        if schema is None or attempted_schema_modes == 1:
+            raise BackendError(f"request to {self._client.base_url} failed: {last_error}")
+        raise BackendError(
+            f"every structured-output mode was rejected by {self._client.base_url}: {last_error}"
+        )
 
     @staticmethod
     def _with_schema_instruction(
@@ -193,7 +230,15 @@ class _OpenAICompatMessages:
         for attempt in range(MAX_RETRIES):
             client.throttle.wait()
             try:
-                data = _post_json(url, headers, body)
+                with _hard_deadline(TIMEOUT_S + 15):
+                    data = _post_json(url, headers, body)
+            except TimeoutError as exc:
+                # Surface stalls immediately. A silent retry here is how a run
+                # ends up looking alive for hours while doing nothing.
+                print(f"  [backend] {exc}, retrying ({attempt + 1}/{MAX_RETRIES})", file=sys.stderr, flush=True)
+                if attempt == MAX_RETRIES - 1:
+                    raise BackendError(f"request stalled out after {MAX_RETRIES} attempts") from exc
+                continue
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode(errors="replace")[:500]
                 # 400 means this request shape is wrong - a different schema
@@ -204,6 +249,11 @@ class _OpenAICompatMessages:
                     raise BackendError(f"HTTP {exc.code} - check NARRATOR_API_KEY: {detail}") from exc
                 if attempt == MAX_RETRIES - 1:
                     raise BackendError(f"HTTP {exc.code} after {MAX_RETRIES} attempts: {detail}") from exc
+                print(
+                    f"  [backend] HTTP {exc.code}, backing off ({attempt + 1}/{MAX_RETRIES})",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 time.sleep(min(2**attempt, 60))
                 continue
             except urllib.error.URLError as exc:
@@ -215,7 +265,21 @@ class _OpenAICompatMessages:
             choices = data.get("choices") or []
             if not choices:
                 raise BackendError(f"no choices in response: {json.dumps(data)[:500]}")
-            return choices[0].get("message", {}).get("content") or ""
+            content = choices[0].get("message", {}).get("content") or ""
+
+            # An empty completion must never reach the judge. A narration with
+            # no text names no entities and states no severity, which scores as
+            # a successful entity_omission bypass - so a reasoning model that
+            # spends its whole budget on hidden tokens, or any truncated
+            # response, would silently inflate the bypass rate instead of
+            # failing. Fail loudly.
+            if not content.strip():
+                finish = choices[0].get("finish_reason", "unknown")
+                raise BackendError(
+                    f"empty completion (finish_reason={finish}) - refusing to score it "
+                    f"as a narration; raise max_tokens or use a non-reasoning model"
+                )
+            return content
 
         raise BackendError("exhausted retries")
 

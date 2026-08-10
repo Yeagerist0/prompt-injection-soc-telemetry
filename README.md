@@ -19,10 +19,21 @@ told to do. See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 ## Results
 
-**Not yet measured against the live API** - see
-[`docs/RESULTS.md`](docs/RESULTS.md) for the full methodology and the
-table this section will be replaced with once a real run has happened.
-Nothing here is estimated or fabricated in the meantime.
+Measured 2026-08-10 on `gemini-3.1-flash-lite`, 66 payloads x 3 tiers,
+temperature 0. Bypass rate (lower is better):
+
+| Tier | Overall | severity_downgrade | entity_omission | instruction_leak |
+|---|---|---|---|---|
+| naive | **23%** | 26% | 47% | 0% |
+| hardened | **6%** | 6% | 13% | 0% |
+| structural | **8%** | 0% | 33% | 0% |
+
+The structurally-grounded narrator never downgraded severity in its own
+voice. Two things in [`docs/RESULTS.md`](docs/RESULTS.md) qualify this and
+should be read before citing the table: the judge originally scored *quoted
+attacker text* as a bypass, which inverted the whole ordering until fixed;
+and structural's 33% `entity_omission` measures the renderer's per-event
+field coverage, not the model's behavior.
 
 ```
 ANTHROPIC_API_KEY=sk-... python -m eval.run_all

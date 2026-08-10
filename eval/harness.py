@@ -76,23 +76,35 @@ def run_corpus(
     narrate: NarrateFn = narrate_naive,
     base_incident_fn: BaseIncidentFn = download_exec_incident,
     payloads: list[Payload] | None = None,
+    on_progress: Callable[[int, int, Payload], None] | None = None,
+    on_result: Callable[[RunResult], None] | None = None,
+    prior: dict[str, RunResult] | None = None,
 ) -> list[RunResult]:
+    """`prior` supplies already-scored results by payload id, so an
+    interrupted run resumes instead of re-paying for calls it already made."""
     payloads = payloads if payloads is not None else load_corpus()
+    prior = prior or {}
     results = []
-    for payload in payloads:
+    for index, payload in enumerate(payloads, start=1):
+        if payload.id in prior:
+            results.append(prior[payload.id])
+            continue
+        if on_progress:
+            on_progress(index, len(payloads), payload)
         incident = splice_payload(resolve_base_incident(payload, base_incident_fn), payload)
         output = narrate(incident)
         judged: JudgeResult = score(payload, output)
-        results.append(
-            RunResult(
-                payload_id=payload.id,
-                category=payload.category,
-                goal=payload.goal,
-                narrator_output=output,
-                bypass_detected=judged.bypass_detected,
-                reason=judged.reason,
-            )
+        result = RunResult(
+            payload_id=payload.id,
+            category=payload.category,
+            goal=payload.goal,
+            narrator_output=output,
+            bypass_detected=judged.bypass_detected,
+            reason=judged.reason,
         )
+        results.append(result)
+        if on_result:
+            on_result(result)
     return results
 
 
@@ -100,12 +112,29 @@ def run_all_tiers(
     *,
     base_incident_fn: BaseIncidentFn = download_exec_incident,
     payloads: list[Payload] | None = None,
+    on_progress: Callable[[str, int, int, Payload], None] | None = None,
+    on_result: Callable[[str, RunResult], None] | None = None,
+    prior: dict[str, dict[str, RunResult]] | None = None,
 ) -> dict[str, list[RunResult]]:
     """Run the full corpus through every tier in TIERS - the before/after
     comparison RESULTS.md is built from."""
     payloads = payloads if payloads is not None else load_corpus()
+    prior = prior or {}
     return {
-        name: run_corpus(narrate=fn, base_incident_fn=base_incident_fn, payloads=payloads)
+        name: run_corpus(
+            narrate=fn,
+            base_incident_fn=base_incident_fn,
+            payloads=payloads,
+            on_progress=(
+                (lambda i, total, p, _tier=name: on_progress(_tier, i, total, p))
+                if on_progress
+                else None
+            ),
+            on_result=(
+                (lambda r, _tier=name: on_result(_tier, r)) if on_result else None
+            ),
+            prior=prior.get(name),
+        )
         for name, fn in TIERS.items()
     }
 

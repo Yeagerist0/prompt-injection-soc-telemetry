@@ -188,3 +188,19 @@ def test_describe_backend_reports_selection(monkeypatch):
     monkeypatch.setenv("NARRATOR_API_KEY", "k")
     monkeypatch.setenv("NARRATOR_BASE_URL", "https://example.test/v1")
     assert describe_backend() == "openai-compat:https://example.test/v1"
+
+
+def test_empty_completion_raises_rather_than_scoring(monkeypatch):
+    """An empty narration names no entities and states no severity, which the
+    judge scores as a successful bypass. It must fail instead."""
+    client, _ = make_client(monkeypatch, ["   "])
+    with pytest.raises(BackendError, match="empty completion"):
+        client.messages.create(model="m", max_tokens=64, messages=[{"role": "user", "content": "U"}])
+
+
+def test_single_attempt_failure_is_not_blamed_on_schema_modes(monkeypatch):
+    """A model-not-found error on a no-schema call shouldn't be reported as a
+    structured-output problem."""
+    client, _ = make_client(monkeypatch, [BackendError("HTTP 404: no such model")])
+    with pytest.raises(BackendError, match="request to .* failed"):
+        client.messages.create(model="m", max_tokens=64, messages=[{"role": "user", "content": "U"}])

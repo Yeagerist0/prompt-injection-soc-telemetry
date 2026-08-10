@@ -91,6 +91,33 @@ def write_json(
     path.write_text(json.dumps(payload, indent=2))
 
 
+def load_checkpoint(path: Path) -> dict[str, dict[str, RunResult]]:
+    """Rebuild {tier: {payload_id: RunResult}} from a checkpoint file.
+
+    Tolerates a truncated final line: a process killed mid-write leaves one,
+    and refusing to resume because of it would defeat the point.
+    """
+    prior: dict[str, dict[str, RunResult]] = {}
+    if not path.exists():
+        return prior
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        tier = record.pop("tier", None)
+        if not tier:
+            continue
+        try:
+            prior.setdefault(tier, {})[record["payload_id"]] = RunResult(**record)
+        except TypeError:
+            continue
+    return prior
+
+
 def format_summary_table(summaries: dict[str, dict[str, float]]) -> str:
     header = f"{'tier':<12} {'overall':>10}  " + "  ".join(f"{g:>20}" for g in _GOALS)
     rows = [header, "-" * len(header)]
@@ -138,7 +165,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    all_results = run_all_tiers()
+    def report_progress(tier: str, index: int, total: int, payload) -> None:
+        print(f"[{tier:<10} {index:>3}/{total}] {payload.id}", flush=True)
+
+    # Checkpoint every scored result as it lands. A run that dies at call 150
+    # of 198 previously lost all 150; now it resumes, which matters most on a
+    # metered free tier where those calls cannot simply be re-bought.
+    RESULTS_DIR.mkdir(exist_ok=True)
+    checkpoint = RESULTS_DIR / "checkpoint.jsonl"
+    prior = load_checkpoint(checkpoint)
+    resumed = sum(len(v) for v in prior.values())
+    if resumed:
+        print(f"resuming: {resumed} results recovered from {checkpoint.name}\n", flush=True)
+
+    def record(tier: str, result: RunResult) -> None:
+        with checkpoint.open("a") as f:
+            f.write(json.dumps({"tier": tier, **asdict(result)}) + "\n")
+
+    all_results = run_all_tiers(on_progress=report_progress, on_result=record, prior=prior)
     summaries = {tier: summarize(results) for tier, results in all_results.items()}
 
     RESULTS_DIR.mkdir(exist_ok=True)
