@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
-import anthropic
-
+from narrator.backends import get_client
 from narrator.prompts.legacy_naive_prompt import build_naive_prompt
 from narrator.prompts.system_prompt import HARDENED_RESPONSE_SCHEMA, SYSTEM_PROMPT, build_hardened_prompt
 from telemetry.schema import Incident
@@ -24,11 +24,11 @@ DEFAULT_MODEL = os.environ.get("NARRATOR_MODEL", "claude-opus-4-8")
 def narrate_naive(
     incident: Incident,
     *,
-    client: anthropic.Anthropic | None = None,
+    client: Any | None = None,
     model: str = DEFAULT_MODEL,
 ) -> str:
     """Summarize an incident using the naive (unhardened) prompt path."""
-    client = client or anthropic.Anthropic()
+    client = client or get_client()
     response = client.messages.create(
         model=model,
         max_tokens=1024,
@@ -56,12 +56,12 @@ def flatten_hardened_response(parsed: dict) -> str:
 def narrate_hardened(
     incident: Incident,
     *,
-    client: anthropic.Anthropic | None = None,
+    client: Any | None = None,
     model: str = DEFAULT_MODEL,
 ) -> str:
     """Summarize an incident using the hardened (delimited, typed, JSON-only)
     prompt path."""
-    client = client or anthropic.Anthropic()
+    client = client or get_client()
     response = client.messages.create(
         model=model,
         max_tokens=1024,

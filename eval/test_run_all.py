@@ -30,10 +30,11 @@ def test_write_csv_contains_one_row_per_result_across_all_tiers(tmp_path):
 def test_write_json_round_trips_results_and_summaries(tmp_path):
     path = tmp_path / "out.json"
     summaries = {"naive": {"overall": 0.5}, "hardened": {"overall": 0.0}}
-    write_json(path, _FIXTURE_RESULTS, summaries, model="claude-opus-4-8")
+    write_json(path, _FIXTURE_RESULTS, summaries, model="claude-opus-4-8", backend="anthropic")
     parsed = json.loads(path.read_text())
 
     assert parsed["model"] == "claude-opus-4-8"
+    assert parsed["backend"] == "anthropic"
     assert parsed["summaries"] == summaries
     assert parsed["results"]["naive"][0]["payload_id"] == "pm-01"
     assert parsed["results"]["hardened"][1]["reason"] == "entity present"

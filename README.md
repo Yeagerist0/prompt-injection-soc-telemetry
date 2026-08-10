@@ -28,6 +28,11 @@ Nothing here is estimated or fabricated in the meantime.
 ANTHROPIC_API_KEY=sk-... python -m eval.run_all
 ```
 
+The narrator tiers run against any model — see
+[Running the eval](#running-the-eval). Every result file records the model
+and endpoint that produced it, because a bypass rate without a named model
+attached isn't a measurement.
+
 ## Dashboard
 
 ```
@@ -91,6 +96,31 @@ ANTHROPIC_API_KEY=sk-... python -m eval.run_all
 # or, cheaper:
 ANTHROPIC_API_KEY=sk-... python -m eval.run_all --model claude-haiku-4-5
 ```
+
+### Other model backends
+
+Nothing about the experiment is Anthropic-specific — the question is whether
+prompt-level defenses survive attacker-controlled telemetry, and that's worth
+answering on whatever model you can get an API key for. Point the narrators at
+any OpenAI-compatible `/chat/completions` endpoint (Gemini's compatibility
+layer, Groq, OpenRouter, a local vLLM or llama.cpp server):
+
+```
+export NARRATOR_API_KEY=...
+export NARRATOR_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+export NARRATOR_MODEL=<model id>
+export NARRATOR_RPM=10          # pace a free tier; 0 = no throttle
+python -m eval.run_all
+```
+
+`NARRATOR_API_KEY` takes precedence over `ANTHROPIC_API_KEY`, so you can switch
+providers without unsetting anything. The shim
+(`narrator/backends.py`) translates the Anthropic-shaped call the narrators
+make into a chat-completions request, and degrades through
+strict `json_schema` → non-strict `json_schema` → `json_object` → schema-in-prompt
+so a provider with weaker structured-output support still gets measured
+rather than scored as a defense failure. Sampling is pinned to
+`temperature=0`: bypass rates that move with sampling noise aren't results.
 
 Writes a timestamped `eval/results/run_<UTC-timestamp>.{csv,json}` with
 every individual (tier, payload, bypass_detected, reason) result, and

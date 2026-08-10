@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import json
 from enum import Enum
+from typing import Any
 
-import anthropic
-
+from narrator.backends import get_client
 from narrator.narrator import DEFAULT_MODEL
 from narrator.prompts.structural_prompt import build_structural_prompt, build_structural_system_prompt
 from telemetry.schema import Event, EventType, Incident
@@ -147,11 +147,11 @@ def render_structural_report(incident: Incident, classifications: dict[str, Obse
 def narrate_structural(
     incident: Incident,
     *,
-    client: anthropic.Anthropic | None = None,
+    client: Any | None = None,
     model: str = DEFAULT_MODEL,
 ) -> str:
     """Summarize an incident using the structurally-grounded prompt path."""
-    client = client or anthropic.Anthropic()
+    client = client or get_client()
     response = client.messages.create(
         model=model,
         max_tokens=1024,

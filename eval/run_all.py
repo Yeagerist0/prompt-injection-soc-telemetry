@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from eval.harness import RunResult, TIERS, run_all_tiers, summarize
+from narrator.backends import describe_backend
 
 RESULTS_DIR = Path(__file__).parent / "results"
 _GOALS = ("severity_downgrade", "entity_omission", "instruction_leak")
@@ -76,10 +77,14 @@ def write_json(
     all_results: dict[str, list[RunResult]],
     summaries: dict[str, dict[str, float]],
     model: str,
+    backend: str = "unknown",
 ) -> None:
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "model": model,
+        # Which provider served the run. A bypass rate is only interpretable
+        # against a named model on a named endpoint.
+        "backend": backend,
         "summaries": summaries,
         "results": {tier: [asdict(r) for r in results] for tier, results in all_results.items()},
     }
@@ -101,12 +106,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default=None, help="Override NARRATOR_MODEL for this run")
     args = parser.parse_args(argv)
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    backend = describe_backend()
+    if backend == "none":
         print(
-            "ANTHROPIC_API_KEY is not set - every tier makes real Claude API calls.\n"
-            "Set it, or run `ant auth login` to authenticate via an OAuth profile\n"
-            "instead. Either way the calls bill against Console API credit: a\n"
-            "Claude.ai Pro/Max chat subscription does not include API usage.",
+            "No model backend is configured - every tier makes real API calls.\n"
+            "\n"
+            "  Anthropic:         export ANTHROPIC_API_KEY=sk-...\n"
+            "                     (bills Console API credit; a Claude.ai Pro/Max\n"
+            "                     chat subscription does not include API usage)\n"
+            "\n"
+            "  Any OpenAI-compatible endpoint (Gemini compat layer, Groq,\n"
+            "  OpenRouter, a local vLLM/llama.cpp server):\n"
+            "                     export NARRATOR_API_KEY=...\n"
+            "                     export NARRATOR_BASE_URL=https://host/v1\n"
+            "                     export NARRATOR_MODEL=<model id>\n"
+            "                     export NARRATOR_RPM=10   # pace a free tier",
             file=sys.stderr,
         )
         return 1
@@ -114,6 +128,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.model:
         os.environ["NARRATOR_MODEL"] = args.model
     model = os.environ.get("NARRATOR_MODEL", "claude-opus-4-8")
+
+    # A claude-* id sent to a non-Anthropic endpoint fails 198 times in a row.
+    if backend.startswith("openai-compat") and model.startswith("claude-"):
+        print(
+            f"Refusing to run: backend is {backend} but the model is '{model}'.\n"
+            "Set NARRATOR_MODEL (or --model) to a model that endpoint serves.",
+            file=sys.stderr,
+        )
+        return 1
 
     all_results = run_all_tiers()
     summaries = {tier: summarize(results) for tier, results in all_results.items()}
@@ -123,8 +146,9 @@ def main(argv: list[str] | None = None) -> int:
     csv_path = RESULTS_DIR / f"run_{timestamp}.csv"
     json_path = RESULTS_DIR / f"run_{timestamp}.json"
     write_csv(csv_path, all_results)
-    write_json(json_path, all_results, summaries, model)
+    write_json(json_path, all_results, summaries, model, backend)
 
+    print(f"backend: {backend}   model: {model}\n")
     print(format_summary_table(summaries))
     print(f"\nWrote {csv_path} and {json_path}")
     return 0
