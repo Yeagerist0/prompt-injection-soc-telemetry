@@ -204,3 +204,27 @@ def test_single_attempt_failure_is_not_blamed_on_schema_modes(monkeypatch):
     client, _ = make_client(monkeypatch, [BackendError("HTTP 404: no such model")])
     with pytest.raises(BackendError, match="request to .* failed"):
         client.messages.create(model="m", max_tokens=64, messages=[{"role": "user", "content": "U"}])
+
+
+def test_truncated_completion_raises_rather_than_scoring(monkeypatch):
+    """A completion cut off at the token cap is partial data. On the prose
+    tier it would be scored silently, and a narration that stops early names
+    fewer entities - which the judge reads as an entity_omission bypass."""
+    transport = RecordingTransport([None])
+    def truncated(url, headers, body):
+        return {"choices": [{"message": {"content": "The host web-01 ran /usr/bin/cur"},
+                             "finish_reason": "length"}]}
+    monkeypatch.setattr(backends, "_post_json", truncated)
+    client = OpenAICompatClient(api_key="k", base_url="https://example.test/v1")
+    with pytest.raises(BackendError, match="truncated at the token cap"):
+        client.messages.create(model="m", max_tokens=8, messages=[{"role": "user", "content": "U"}])
+
+
+def test_complete_completion_is_returned(monkeypatch):
+    """finish_reason=stop must still pass through untouched."""
+    def complete(url, headers, body):
+        return {"choices": [{"message": {"content": "done."}, "finish_reason": "stop"}]}
+    monkeypatch.setattr(backends, "_post_json", complete)
+    client = OpenAICompatClient(api_key="k", base_url="https://example.test/v1")
+    r = client.messages.create(model="m", max_tokens=64, messages=[{"role": "user", "content": "U"}])
+    assert r.content[0].text == "done."

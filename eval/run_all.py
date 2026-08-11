@@ -17,6 +17,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -78,10 +79,16 @@ def write_json(
     summaries: dict[str, dict[str, float]],
     model: str,
     backend: str = "unknown",
+    excluded: list[tuple[str, str, str]] | None = None,
 ) -> None:
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "model": model,
+        # Payloads whose narration could not be obtained. Recorded so a reader
+        # can see the real denominator rather than inferring it from n.
+        "excluded": [
+            {"tier": t, "payload_id": pid, "error": why} for t, pid, why in (excluded or [])
+        ],
         # Which provider served the run. A bypass rate is only interpretable
         # against a named model on a named endpoint.
         "backend": backend,
@@ -89,6 +96,11 @@ def write_json(
         "results": {tier: [asdict(r) for r in results] for tier, results in all_results.items()},
     }
     path.write_text(json.dumps(payload, indent=2))
+
+
+def _slug(value: str) -> str:
+    """Filesystem-safe token for a model id (they contain / and . upstream)."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-") or "unknown"
 
 
 def load_checkpoint(path: Path) -> dict[str, dict[str, RunResult]]:
@@ -172,7 +184,11 @@ def main(argv: list[str] | None = None) -> int:
     # of 198 previously lost all 150; now it resumes, which matters most on a
     # metered free tier where those calls cannot simply be re-bought.
     RESULTS_DIR.mkdir(exist_ok=True)
-    checkpoint = RESULTS_DIR / "checkpoint.jsonl"
+    # Key the checkpoint to the model. A shared file would let a run resume
+    # from a *different* model's saved results and silently report them as
+    # this model's - which is exactly the failure mode a multi-model
+    # comparison would hit first, and would not look like an error.
+    checkpoint = RESULTS_DIR / f"checkpoint_{_slug(model)}.jsonl"
     prior = load_checkpoint(checkpoint)
     resumed = sum(len(v) for v in prior.values())
     if resumed:
@@ -182,7 +198,15 @@ def main(argv: list[str] | None = None) -> int:
         with checkpoint.open("a") as f:
             f.write(json.dumps({"tier": tier, **asdict(result)}) + "\n")
 
-    all_results = run_all_tiers(on_progress=report_progress, on_result=record, prior=prior)
+    excluded: list[tuple[str, str, str]] = []
+
+    def record_error(tier: str, payload, exc: Exception) -> None:
+        excluded.append((tier, payload.id, f"{type(exc).__name__}: {exc}"))
+        print(f"  ! excluded {tier}/{payload.id}: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+
+    all_results = run_all_tiers(
+        on_progress=report_progress, on_result=record, on_error=record_error, prior=prior
+    )
     summaries = {tier: summarize(results) for tier, results in all_results.items()}
 
     RESULTS_DIR.mkdir(exist_ok=True)
@@ -190,9 +214,17 @@ def main(argv: list[str] | None = None) -> int:
     csv_path = RESULTS_DIR / f"run_{timestamp}.csv"
     json_path = RESULTS_DIR / f"run_{timestamp}.json"
     write_csv(csv_path, all_results)
-    write_json(json_path, all_results, summaries, model, backend)
+    write_json(json_path, all_results, summaries, model, backend, excluded)
 
-    print(f"backend: {backend}   model: {model}\n")
+    print(f"backend: {backend}   model: {model}")
+    if excluded:
+        print(
+            f"excluded {len(excluded)} payload(s) whose narration could not be obtained; "
+            f"they are missing data, not bypasses, and are out of the denominator:"
+        )
+        for tier, pid, why in excluded:
+            print(f"  {tier}/{pid}: {why[:110]}")
+    print()
     print(format_summary_table(summaries))
     print(f"\nWrote {csv_path} and {json_path}")
     return 0

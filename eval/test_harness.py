@@ -1,3 +1,5 @@
+import pytest
+
 from eval.harness import run_corpus, splice_payload, summarize
 from eval.judge import _extract_entity_marker
 from injection_corpus.loader import load_corpus
@@ -79,3 +81,43 @@ def test_summarize_computes_overall_and_per_goal_bypass_rates():
 
 def test_summarize_of_empty_results_returns_empty_dict():
     assert summarize([]) == {}
+
+
+def test_failed_narration_is_excluded_not_scored():
+    """An unusable response is missing data - neither a bypass nor a
+    non-bypass. Forcing it into either bucket would bias the rate."""
+    from eval.harness import run_corpus
+    from injection_corpus.loader import load_corpus
+
+    payloads = load_corpus()[:4]
+    seen = []
+
+    def flaky(_incident):
+        if len(seen) == 1:
+            raise RuntimeError("truncated at the token cap")
+        return "Severity: critical. Host web-01 ran /usr/bin/curl and /tmp/payload."
+
+    def narrate(incident):
+        seen.append(1)
+        return flaky(incident)
+
+    errors = []
+    results = run_corpus(
+        narrate=narrate, payloads=payloads,
+        on_error=lambda p, e: errors.append((p.id, str(e))),
+    )
+    assert len(results) == len(payloads) - 1, "failed payload must be out of the denominator"
+    assert len(errors) == 1
+    assert "truncated" in errors[0][1]
+
+
+def test_failure_still_raises_when_no_error_handler():
+    """Without an on_error handler the failure must not be swallowed."""
+    from eval.harness import run_corpus
+    from injection_corpus.loader import load_corpus
+
+    def boom(_incident):
+        raise RuntimeError("backend down")
+
+    with pytest.raises(RuntimeError, match="backend down"):
+        run_corpus(narrate=boom, payloads=load_corpus()[:2])

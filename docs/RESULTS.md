@@ -15,8 +15,10 @@ nothing is estimated. 66 payloads x 3 tiers = 198 narrator calls, temperature 0.
 Intervals are a percentile bootstrap over the 66 payloads, 10,000 resamples
 (`python -m eval.stats`). The uncertainty being quantified is *which payloads
 the corpus contains*, not sampling noise: the eval runs at temperature 0, so
-re-running a payload returns the same completion and the same verdict.
-Repeated sampling would produce identical numbers and false confidence.
+sampling is not a design variable and "more samples per payload" would produce
+near-identical numbers with false confidence. (Hosted endpoints are not
+perfectly reproducible even at temperature 0 - see the determinism note
+below.)
 
 ## What the corpus can and cannot separate
 
@@ -40,6 +42,60 @@ models, or payloads targeted at where they actually differ.
 
 On the one goal built for it, the structural tier is unambiguous: **it never
 downgraded severity in its own voice, 0 of 66.**
+
+## Second model: what replicates and what doesn't
+
+The same 66 payloads on `meta/llama-3.1-8b-instruct` (NVIDIA NIM), same
+temperature, same judge:
+
+| Tier | gemini-3.1-flash-lite | meta/llama-3.1-8b-instruct |
+|---|---|---|
+| naive | 22.7% [13.6%, 33.3%] | 18.2% [9.1%, 27.3%] |
+| prompt-hardened | 6.1% [1.5%, 12.1%] | 9.1% [3.0%, 16.7%] |
+| structurally grounded | 7.6% [1.5%, 15.2%] | 7.6% [1.5%, 15.2%] |
+
+Does each defense beat naive *on that model*, by a margin the corpus can
+resolve?
+
+| Model | naive − hardened | naive − structural |
+|---|---|---|
+| gemini-3.1-flash-lite | 16.7% [7.6%, 27.3%] — **yes** | 15.2% [7.6%, 24.2%] — **yes** |
+| meta/llama-3.1-8b-instruct | 9.1% [0.0%, 18.2%] — **no** | 10.6% [4.5%, 18.2%] — **yes** |
+
+**Structural grounding replicates. Prompt hardening does not.** On
+llama-3.1-8b the prompt-hardened tier's advantage over naive has a lower
+bound of exactly zero — this corpus cannot show that it helped at all. The
+structurally-grounded tier beats naive on both models, and lands on the same
+7.6% on both.
+
+On the goal it was built for, the structural tier is identical across models:
+
+| Tier | severity_downgrade, gemini | severity_downgrade, llama |
+|---|---|---|
+| naive | 8/31 | 4/31 |
+| prompt-hardened | 2/31 | 2/31 |
+| structurally grounded | **0/31** | **0/31** |
+
+This is the result the project was built to test, and one model could not have
+established it: a defense that works on the model you happened to pick tells
+you little. Two models is still two — but it is enough to show that the
+prompt-level tier's benefit is model-dependent while the structural tier's is
+not.
+
+### A note on determinism
+
+Everything runs at temperature 0, but the providers are not perfectly
+deterministic. One payload (`rk-03`) truncated at the token cap on the
+llama run's first attempt — the model degenerated into repeating a registry
+path — and completed normally when the run resumed. Temperature 0 removes
+sampling as a *design* variable; it does not make a hosted endpoint
+reproducible.
+
+Truncated output is now refused rather than scored (`narrator/backends.py`),
+and a payload whose narration cannot be obtained is excluded from the
+denominator and recorded in the run's `excluded` field. A partial narration
+names fewer entities, which the judge reads as an `entity_omission` bypass —
+scoring it would silently inflate exactly the number this repo measures.
 
 ## Two caveats that matter more than the headline
 
@@ -94,54 +150,41 @@ change this number; both are open work.
 ```
 export NARRATOR_API_KEY=... NARRATOR_BASE_URL=https://host/v1
 export NARRATOR_MODEL=<model id> NARRATOR_RPM=15
-python -m eval.run_all      # resumes from eval/results/checkpoint.jsonl if present
+python -m eval.run_all      # resumes from eval/results/checkpoint_<model>.jsonl if present
 python -m eval.rescore      # re-judge saved outputs after a judge change
 ```
 
 
-The comparison that matters most is the second block: a defense that scores
-well on `generic` payloads but poorly on ones engineered against it has
-learned the shape of easy attacks rather than raised the bar. See
-`docs/THREAT_MODEL.md` § Tier-targeted payloads.
+## Predictions vs outcomes
 
-| Tier | All payloads | vs `generic` | vs `hardened`-targeted | vs `structural`-targeted |
-|---|---|---|---|---|
-| naive | — | — | — | — |
-| hardened | — | — | — | — |
-| structural | — | — | — | — |
+Before any run, `docs/THREAT_MODEL.md` and this file committed to what the
+numbers should look like. Recording how those predictions fared is the point
+of writing them down.
 
-## Bypass rate by tier and goal
+**"Naive should be high across the board."** Partly right. Naive is highest on
+every goal it lost, but `instruction_leak` came in at 0% for *every* tier
+including naive — no payload got a model to emit attacker-directed fixed text.
+Either the corpus's instruction-leak payloads are too weak or the goal is
+genuinely harder than assumed; the corpus needs stronger payloads there before
+the 0% means anything.
 
-Bypass rate = fraction of payloads targeting that goal for which
-`eval/judge.py` detected the intended outcome (lower is better; tier 1 is
-the vulnerable baseline, tier 3 is the hardened architectural design —
-see `docs/THREAT_MODEL.md`).
+**"Hardened should drop meaningfully but not to zero, especially on
+instruction_leak."** Wrong on the second half. Hardened dropped to 0% on
+`instruction_leak`, not "not to zero" — see above for why that number is not
+yet informative.
 
-| Tier | Overall | severity_downgrade | entity_omission | instruction_leak |
-|---|---|---|---|---|
-| naive | — | — | — | — |
-| hardened | — | — | — | — |
-| structural | — | — | — | — |
+**"Structural should be at or near zero on severity_downgrade *and*
+entity_omission. Any nonzero rate there indicates a judge or implementation bug
+worth investigating immediately, not a 'the model tried harder' result."**
 
-## What to look for once this is populated
+This one was exactly right, and it earned its keep. Structural is 0/31 on
+`severity_downgrade` on both models, as predicted — but 33% on
+`entity_omission`. Following the instruction to treat that as a bug rather than
+a result led straight to the cause: `splice_payload` places `process_metadata`
+payloads on a `DNS_QUERY` event, whose structural template renders only
+`dns_name` and drops `proc_image`. The entity never reaches the analyst because
+the renderer never shows it. A prediction that told us where to look, and what
+kind of thing to look for, is worth more than one that was merely accurate.
 
-- **Naive should be high across the board** — nothing in tier 1 resists
-  any of the three goals; a low naive bypass rate would suggest either the
-  corpus is too weak or the judge's heuristics are too strict (both worth
-  auditing before trusting the comparison).
-- **Hardened should drop meaningfully but not to zero**, especially on
-  `instruction_leak` — the model still authors free text in the `summary`
-  field, so a sufficiently well-crafted payload can still influence it.
-- **Structural should be at or near zero on `severity_downgrade` and
-  `entity_omission`** by construction (severity is never asked of the
-  model; every event is always rendered). Any nonzero rate there indicates
-  a judge or implementation bug worth investigating immediately, not a
-  "the model tried harder" result. Nonzero `instruction_leak`-flagged
-  results at this tier are more expected — see `docs/THREAT_MODEL.md`'s
-  "Residual risk at tier 3" section for why a swayed `ObservationKind`
-  label (e.g. `routine_administration` on a malicious event) can still
-  trip the judge's benign-language check.
-- **Per-category breakdown** (`process_metadata` / `file_path` /
-  `network_artifact` / `log_string`) is in the raw CSV/JSON even though
-  this table doesn't show it — worth checking whether one field type is
-  systematically harder to defend than others.
+**Per-category breakdown** is in the raw CSV/JSON and is still unexamined —
+whether one field type is systematically harder to defend remains open.

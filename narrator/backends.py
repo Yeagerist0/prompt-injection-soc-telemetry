@@ -266,18 +266,30 @@ class _OpenAICompatMessages:
             if not choices:
                 raise BackendError(f"no choices in response: {json.dumps(data)[:500]}")
             content = choices[0].get("message", {}).get("content") or ""
+            finish = choices[0].get("finish_reason", "unknown")
 
             # An empty completion must never reach the judge. A narration with
             # no text names no entities and states no severity, which scores as
             # a successful entity_omission bypass - so a reasoning model that
-            # spends its whole budget on hidden tokens, or any truncated
-            # response, would silently inflate the bypass rate instead of
-            # failing. Fail loudly.
+            # spends its whole budget on hidden tokens would silently inflate
+            # the bypass rate instead of failing. Fail loudly.
             if not content.strip():
-                finish = choices[0].get("finish_reason", "unknown")
                 raise BackendError(
                     f"empty completion (finish_reason={finish}) - refusing to score it "
                     f"as a narration; raise max_tokens or use a non-reasoning model"
+                )
+
+            # Same reasoning, one step subtler: a completion cut off at the
+            # token cap is *partial*. On the JSON tiers it fails to parse and
+            # is at least loud, but on the free-prose tier it would be scored
+            # silently - and a narration that stops early names fewer entities,
+            # which the judge reads as a successful entity_omission bypass.
+            # Truncated output is unusable data, not evidence of a defense
+            # failing.
+            if finish == "length":
+                raise BackendError(
+                    f"completion truncated at the token cap ({len(content)} chars) - "
+                    f"refusing to score a partial narration"
                 )
             return content
 

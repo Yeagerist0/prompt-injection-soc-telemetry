@@ -95,3 +95,14 @@ def test_write_csv_neutralizes_a_formula_in_attacker_controlled_columns(tmp_path
     body = rows[1]
     for cell in body:
         assert not cell.startswith(("=", "+", "-", "@", "\t", "\r")), f"live formula survived: {cell!r}"
+
+
+def test_model_slug_is_filesystem_safe():
+    """Checkpoints are keyed by model id; upstream ids contain / and : which
+    would silently create nested paths or fail to open."""
+    from eval.run_all import _slug
+
+    assert _slug("gemini-3.1-flash-lite") == "gemini-3.1-flash-lite"
+    assert _slug("meta-llama/llama-3.1-8b-instruct:free") == "meta-llama-llama-3.1-8b-instruct-free"
+    assert _slug("///") == "unknown"
+    assert "/" not in _slug("a/b/c")

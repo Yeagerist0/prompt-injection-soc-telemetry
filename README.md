@@ -34,11 +34,19 @@ difference is −1.5% [−9.1%, 6.1%], so reading 6.1% vs 7.6% as a ranking is
 reading noise. The structurally-grounded narrator never downgraded severity in
 its own voice, 0 of 66.
 
+**On a second model** (`meta/llama-3.1-8b-instruct`), the structural tier lands
+on the same 7.6% and again beats naive — but the prompt-hardened tier's
+advantage over naive drops to 9.1% [0.0%, 18.2%], which this corpus cannot
+distinguish from no benefit at all. Structural grounding replicates across the
+two models; prompt hardening does not. On severity downgrade specifically the
+structural tier is 0/31 on both.
+
 Three things in [`docs/RESULTS.md`](docs/RESULTS.md) qualify this and should be
 read before citing the table: the judge originally scored *quoted attacker
 text* as a bypass, which inverted the whole ordering until fixed; structural's
 33% `entity_omission` measures the renderer's per-event field coverage, not the
-model's behavior; and every number here is one model.
+model's behavior; and the prompt-hardened tier's benefit does not
+replicate across the two models tested.
 
 ```
 ANTHROPIC_API_KEY=sk-... python -m eval.run_all

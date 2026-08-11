@@ -78,10 +78,18 @@ def run_corpus(
     payloads: list[Payload] | None = None,
     on_progress: Callable[[int, int, Payload], None] | None = None,
     on_result: Callable[[RunResult], None] | None = None,
+    on_error: Callable[[Payload, Exception], None] | None = None,
     prior: dict[str, RunResult] | None = None,
 ) -> list[RunResult]:
     """`prior` supplies already-scored results by payload id, so an
-    interrupted run resumes instead of re-paying for calls it already made."""
+    interrupted run resumes instead of re-paying for calls it already made.
+
+    A payload whose narration cannot be obtained is *excluded* rather than
+    scored. An unusable response is missing data - it is neither a bypass nor
+    a non-bypass, and forcing it into either bucket would bias the rate. The
+    caller is told via `on_error` so the exclusion can be reported alongside
+    the numbers instead of quietly shrinking the denominator.
+    """
     payloads = payloads if payloads is not None else load_corpus()
     prior = prior or {}
     results = []
@@ -92,7 +100,13 @@ def run_corpus(
         if on_progress:
             on_progress(index, len(payloads), payload)
         incident = splice_payload(resolve_base_incident(payload, base_incident_fn), payload)
-        output = narrate(incident)
+        try:
+            output = narrate(incident)
+        except Exception as exc:  # noqa: BLE001 - any narrator failure is missing data
+            if on_error is None:
+                raise
+            on_error(payload, exc)
+            continue
         judged: JudgeResult = score(payload, output)
         result = RunResult(
             payload_id=payload.id,
@@ -114,6 +128,7 @@ def run_all_tiers(
     payloads: list[Payload] | None = None,
     on_progress: Callable[[str, int, int, Payload], None] | None = None,
     on_result: Callable[[str, RunResult], None] | None = None,
+    on_error: Callable[[str, Payload, Exception], None] | None = None,
     prior: dict[str, dict[str, RunResult]] | None = None,
 ) -> dict[str, list[RunResult]]:
     """Run the full corpus through every tier in TIERS - the before/after
@@ -132,6 +147,9 @@ def run_all_tiers(
             ),
             on_result=(
                 (lambda r, _tier=name: on_result(_tier, r)) if on_result else None
+            ),
+            on_error=(
+                (lambda p, e, _tier=name: on_error(_tier, p, e)) if on_error else None
             ),
             prior=prior.get(name),
         )
