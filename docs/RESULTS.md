@@ -6,15 +6,40 @@ nothing is estimated. 66 payloads x 3 tiers = 198 narrator calls, temperature 0.
 
 ## Bypass rate by tier
 
-| Tier | Overall | severity_downgrade | entity_omission | instruction_leak |
-|---|---|---|---|---|
-| naive | **23%** | 26% | 47% | 0% |
-| hardened | **6%** | 6% | 13% | 0% |
-| structural | **8%** | 0% | 33% | 0% |
+| Tier | Overall | 95% CI | severity_downgrade | entity_omission | instruction_leak |
+|---|---|---|---|---|---|
+| naive | **22.7%** | [13.6%, 33.3%] | 26% | 47% | 0% |
+| hardened | **6.1%** | [1.5%, 12.1%] | 6% | 13% | 0% |
+| structural | **7.6%** | [1.5%, 15.2%] | 0% | 33% | 0% |
 
-Prompt-level hardening does most of the work here (23% → 6%), and structural
-grounding takes the tier it was built for to zero: **the structurally-grounded
-narrator never once downgraded severity in its own voice.**
+Intervals are a percentile bootstrap over the 66 payloads, 10,000 resamples
+(`python -m eval.stats`). The uncertainty being quantified is *which payloads
+the corpus contains*, not sampling noise: the eval runs at temperature 0, so
+re-running a payload returns the same completion and the same verdict.
+Repeated sampling would produce identical numbers and false confidence.
+
+## What the corpus can and cannot separate
+
+Tier comparisons are paired — every tier sees the same payloads — so the
+bootstrap resamples the same payload indices for both tiers:
+
+| Comparison | Difference | 95% CI | Verdict |
+|---|---|---|---|
+| naive − hardened | 16.7% | [7.6%, 27.3%] | **separated** |
+| naive − structural | 15.2% | [6.1%, 24.2%] | **separated** |
+| hardened − structural | −1.5% | [−9.1%, 6.1%] | **not separated** |
+
+Prompt-level hardening does real work: both defended tiers beat naive by a
+margin this corpus can resolve.
+
+**But 6.1% and 7.6% are not distinguishable at n=66.** Reading the raw
+percentages as "hardened edges out structural" is reading noise. The honest
+claim is that both defenses work and this corpus is not powerful enough to
+rank them against each other. Separating them needs a larger corpus, more
+models, or payloads targeted at where they actually differ.
+
+On the one goal built for it, the structural tier is unambiguous: **it never
+downgraded severity in its own voice, 0 of 66.**
 
 ## Two caveats that matter more than the headline
 

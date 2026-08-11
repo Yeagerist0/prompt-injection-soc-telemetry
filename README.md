@@ -22,18 +22,23 @@ told to do. See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 Measured 2026-08-10 on `gemini-3.1-flash-lite`, 66 payloads x 3 tiers,
 temperature 0. Bypass rate (lower is better):
 
-| Tier | Overall | severity_downgrade | entity_omission | instruction_leak |
-|---|---|---|---|---|
-| naive | **23%** | 26% | 47% | 0% |
-| hardened | **6%** | 6% | 13% | 0% |
-| structural | **8%** | 0% | 33% | 0% |
+| Tier | Overall | 95% CI | severity_downgrade | entity_omission | instruction_leak |
+|---|---|---|---|---|---|
+| naive | **22.7%** | [13.6%, 33.3%] | 26% | 47% | 0% |
+| hardened | **6.1%** | [1.5%, 12.1%] | 6% | 13% | 0% |
+| structural | **7.6%** | [1.5%, 15.2%] | 0% | 33% | 0% |
 
-The structurally-grounded narrator never downgraded severity in its own
-voice. Two things in [`docs/RESULTS.md`](docs/RESULTS.md) qualify this and
-should be read before citing the table: the judge originally scored *quoted
-attacker text* as a bypass, which inverted the whole ordering until fixed;
-and structural's 33% `entity_omission` measures the renderer's per-event
-field coverage, not the model's behavior.
+Both defended tiers beat naive by a margin this corpus can resolve. **The two
+defended tiers are not distinguishable from each other at n=66** — the paired
+difference is −1.5% [−9.1%, 6.1%], so reading 6.1% vs 7.6% as a ranking is
+reading noise. The structurally-grounded narrator never downgraded severity in
+its own voice, 0 of 66.
+
+Three things in [`docs/RESULTS.md`](docs/RESULTS.md) qualify this and should be
+read before citing the table: the judge originally scored *quoted attacker
+text* as a bypass, which inverted the whole ordering until fixed; structural's
+33% `entity_omission` measures the renderer's per-event field coverage, not the
+model's behavior; and every number here is one model.
 
 ```
 ANTHROPIC_API_KEY=sk-... python -m eval.run_all
