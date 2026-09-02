@@ -20,6 +20,14 @@ from telemetry.schema import Incident
 
 DEFAULT_MODEL = os.environ.get("NARRATOR_MODEL", "claude-opus-4-8")
 
+# Narration length cap, shared by all three tiers so a cross-model comparison
+# is never confounded by one model being given more room than another. Newer,
+# chattier models need more than 1024, and the backend refuses to score a
+# truncated narration: a partial report names fewer entities, which the judge
+# reads as an entity_omission bypass. Override with NARRATOR_MAX_TOKENS; the
+# value used is recorded in the run file.
+MAX_TOKENS = int(os.environ.get("NARRATOR_MAX_TOKENS", "1024"))
+
 
 def narrate_naive(
     incident: Incident,
@@ -31,7 +39,7 @@ def narrate_naive(
     client = client or get_client()
     response = client.messages.create(
         model=model,
-        max_tokens=1024,
+        max_tokens=MAX_TOKENS,
         messages=[{"role": "user", "content": build_naive_prompt(incident)}],
     )
     return "".join(block.text for block in response.content if block.type == "text")
@@ -64,7 +72,7 @@ def narrate_hardened(
     client = client or get_client()
     response = client.messages.create(
         model=model,
-        max_tokens=1024,
+        max_tokens=MAX_TOKENS,
         system=SYSTEM_PROMPT,
         output_config={"format": {"type": "json_schema", "schema": HARDENED_RESPONSE_SCHEMA}},
         messages=[{"role": "user", "content": build_hardened_prompt(incident)}],

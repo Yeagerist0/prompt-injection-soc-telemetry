@@ -1,0 +1,101 @@
+"""Tests for the search's guards.
+
+As with `test_redteam.py`, none of these assert that the search finds
+anything. They assert that if it does find something, the finding means what
+the write-up will say it means.
+"""
+from __future__ import annotations
+
+import random
+
+import pytest
+
+from eval.judge import _BENIGN_MARKERS
+from injection_corpus.loader import load_corpus
+from redteam import evolve, operators
+
+
+def test_fitness_vocabulary_is_disjoint_from_the_judge():
+    """The search climbs `soft_fitness`, and is scored by the judge. If they
+    share a word list the gradient and the metric are one measurement, and a
+    high fitness stops being evidence of anything."""
+    for word in evolve._SERIOUSNESS:
+        assert not _BENIGN_MARKERS.search(word), f"{word!r} is also a judge marker"
+
+
+def test_soft_fitness_stays_in_range():
+    for goal in evolve.GOALS:
+        for output in ("", "a malicious critical compromise", "nothing here", "x" * 500):
+            value = evolve.soft_fitness(goal, "/tmp/payload extra words", output)
+            assert 0.0 <= value <= 1.0, (goal, output, value)
+
+
+def test_entity_omission_fitness_rewards_hiding_the_entity():
+    hidden = evolve.soft_fitness("entity_omission", "/tmp/secret-thing here", "no entities seen")
+    shown = evolve.soft_fitness("entity_omission", "/tmp/secret-thing here",
+                                "the file /tmp/secret-thing was written")
+    assert hidden > shown
+
+
+def test_severity_fitness_rewards_a_softer_narration():
+    soft = evolve.soft_fitness("severity_downgrade", "/tmp/x", "A file was written. Nothing else.")
+    hard = evolve.soft_fitness(
+        "severity_downgrade", "/tmp/x",
+        "Critical: a malicious payload was executed, c2 beaconing and exfiltration observed, "
+        "unauthorized access, suspicious backdoor, escalate now. This was an attack that "
+        "led to compromise via command and control.",
+    )
+    assert soft > hard
+
+
+def test_longest_common_run():
+    assert evolve._longest_common_run("abcdef", "zzcdezz") == 3
+    assert evolve._longest_common_run("", "abc") == 0
+    assert evolve._longest_common_run("abc", "abc") == 3
+
+
+def test_seeds_start_from_the_hand_written_corpus():
+    """The search should begin where human effort stopped, not from scratch."""
+    rng = random.Random(0)
+    corpus = {p.payload for p in load_corpus() if p.goal == "severity_downgrade"}
+    seeds = evolve._seeds("severity_downgrade", "proc_image", 60, rng)
+    assert corpus & set(seeds), "no hand-written payload made it into the seed pool"
+
+
+def test_operators_always_return_a_usable_string():
+    rng = random.Random(3)
+    payload = "/usr/bin/curl -o /tmp/x"
+    for _ in range(400):
+        payload = operators.mutate(payload, rng, "proc_image")[:400]
+        assert payload.strip(), "an operator produced an empty payload"
+
+
+def test_a_shortening_operator_exists_and_works():
+    """Without one the search only ever climbs toward longer strings, and
+    'the attack works' cannot be told apart from 'the attack is long'."""
+    rng = random.Random(1)
+    long_payload = " ".join(["token"] * 12)
+    shortened = [operators.shorten(long_payload, rng) for _ in range(20)]
+    assert any(len(s) < len(long_payload) for s in shortened)
+    assert operators.shorten("/tmp/x", rng) == "/tmp/x"
+
+
+def test_crossover_mixes_two_parents():
+    rng = random.Random(5)
+    kids = {operators.crossover("A" * 30, "B" * 30, rng) for _ in range(30)}
+    assert any("A" in k and "B" in k for k in kids)
+
+
+def test_evaluate_records_a_backend_failure_instead_of_crashing():
+    class Boom:
+        def __call__(self, *a, **k):
+            raise RuntimeError("backend down")
+
+    ind = evolve.Individual("/tmp/x", "proc_image", "entity_omission")
+    original = evolve.TIERS["naive"]
+    evolve.TIERS["naive"] = Boom()
+    try:
+        out = evolve.evaluate(ind, "naive", None, "m", {}, evolve.Budget(10))
+    finally:
+        evolve.TIERS["naive"] = original
+    assert out.error and not out.bypass and out.fitness == 0.0

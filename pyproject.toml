@@ -20,17 +20,18 @@ detector = ["torch>=2.4", "transformers>=4.44", "scikit-learn>=1.4", "numpy>=1.2
 pi-eval = "eval.run_all:main"
 pi-dashboard = "eval.dashboard:main"
 pi-detector = "detector.experiment:main"
+pi-redteam = "redteam.loop:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["telemetry", "injection_corpus", "narrator", "narrator.prompts", "eval", "detector"]
+packages = ["telemetry", "injection_corpus", "narrator", "narrator.prompts", "eval", "detector", "redteam"]
 
 [tool.setuptools.package-data]
 injection_corpus = ["*.yaml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["telemetry", "injection_corpus", "narrator", "eval", "detector"]
+testpaths = ["telemetry", "injection_corpus", "narrator", "eval", "detector", "redteam"]

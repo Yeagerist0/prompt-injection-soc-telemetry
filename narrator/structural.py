@@ -25,7 +25,7 @@ from enum import Enum
 from typing import Any
 
 from narrator.backends import get_client
-from narrator.narrator import DEFAULT_MODEL
+from narrator.narrator import DEFAULT_MODEL, MAX_TOKENS
 from narrator.prompts.structural_prompt import build_structural_prompt, build_structural_system_prompt
 from telemetry.schema import Event, EventType, Incident
 
@@ -218,7 +218,7 @@ def narrate_structural(
     client = client or get_client()
     response = client.messages.create(
         model=model,
-        max_tokens=1024,
+        max_tokens=MAX_TOKENS,
         system=build_structural_system_prompt([k.value for k in ObservationKind]),
         output_config={"format": {"type": "json_schema", "schema": _CLASSIFICATION_SCHEMA}},
         messages=[{"role": "user", "content": build_structural_prompt(incident)}],
