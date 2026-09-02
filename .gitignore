@@ -12,3 +12,4 @@ eval/results/checkpoint.jsonl
 
 # detector extras live in their own venv (torch/transformers are optional)
 .venv-detector/
+detector/artifacts/

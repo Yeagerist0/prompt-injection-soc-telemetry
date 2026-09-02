@@ -61,6 +61,45 @@ The narrator tiers run against any model — see
 and endpoint that produced it, because a bypass rate without a named model
 attached isn't a measurement.
 
+## A learned detector
+
+`detector/` asks a different question from the three narrator tiers: can a small
+model look at one attacker-controlled field value, with no surrounding context,
+and tell that it carries an instruction?
+
+At a threshold fitted on validation at a 1% false-positive rate and then
+refitted on each test split's own negatives so the two models can be compared
+at the same false-positive rate:
+
+| model | known techniques | held-out techniques | 66 hand-written payloads |
+|---|---|---|---|
+| length-only control | 0.096 | 0.000 | 0.167 |
+| TF-IDF char 3-5 grams + LR | 1.000 | 0.986 | **0.833** |
+| distilroberta-base fine-tune | 1.000 | 0.991 | 0.803 |
+
+The transformer takes 370s of CPU and does not beat a baseline that fits in
+0.1s on the only split not written by the same generator as its training data.
+Its validation-fitted threshold also drifts from 0.8% to 2.8% FPR on test,
+which the baseline's does not.
+
+Nine payloads get past every model, and they are all one shape — a well-formed
+registry path or domain name carrying no syntactic tell, where the attack is
+what the name *says*
+(`HKLM\SOFTWARE\Policies\CorpIT\ApprovedStartupItems\SvcUpdate`). That is the
+same region a third of the benign class occupies, so it is a limit of scoring
+the field in isolation rather than a threshold to tune.
+
+Every payload that beat the prompt-hardened narrator, on both models, is caught
+by the detector — the two defenses fail on disjoint sets.
+
+Method in [`docs/DETECTOR.md`](docs/DETECTOR.md), numbers in
+[`docs/RESULTS_DETECTOR.md`](docs/RESULTS_DETECTOR.md).
+
+```
+pip install -e ".[detector]"
+python -m detector.experiment
+```
+
 ## Dashboard
 
 ```
@@ -85,7 +124,10 @@ injection_corpus/   66 payloads across 6 categories + a validating loader
 narrator/           three narrator tiers (naive / hardened / structurally-grounded)
 eval/               splices payloads into incidents, runs a narrator tier, scores bypasses
                     + dashboard.py, a self-contained HTML view of the results
-docs/               ARCHITECTURE.md, THREAT_MODEL.md, RESULTS.md, WRITEUP.md, SECURITY.md
+detector/           a learned detector for instruction-carrying field values,
+                    with a length-only control and held-out attack families
+docs/               ARCHITECTURE.md, THREAT_MODEL.md, RESULTS.md, WRITEUP.md,
+                    DETECTOR.md, RESULTS_DETECTOR.md, SECURITY.md
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full data flow

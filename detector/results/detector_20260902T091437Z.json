@@ -1,5 +1,5 @@
 {
-  "generated_at": "20260902T090712Z",
+  "generated_at": "20260902T091437Z",
   "seed": 20260902,
   "target_fpr": 0.01,
   "splits": {
@@ -312,6 +312,121 @@
           "n": 85,
           "caught": 77,
           "recall": 0.906
+        },
+        "vendor_impersonation": {
+          "n": 37,
+          "caught": 37,
+          "recall": 1.0
+        }
+      }
+    },
+    {
+      "model": "distilroberta_base_ft",
+      "threshold": 0.029788590967655182,
+      "reports": [
+        {
+          "split": "val",
+          "n": 450,
+          "n_pos": 210,
+          "n_neg": 240,
+          "roc_auc": 1.0,
+          "pr_auc": 1.0,
+          "threshold": 0.029788590967655182,
+          "recall": 1.0,
+          "fpr": 0.008333333333333333,
+          "precision": 0.9905660377358491,
+          "recall_on_hard_negatives_fpr": 0.020618556701030927
+        },
+        {
+          "split": "test_seen",
+          "n": 584,
+          "n_pos": 197,
+          "n_neg": 387,
+          "roc_auc": 1.0,
+          "pr_auc": 1.0,
+          "threshold": 0.029788590967655182,
+          "recall": 1.0,
+          "fpr": 0.028423772609819122,
+          "precision": 0.9471153846153846,
+          "recall_on_hard_negatives_fpr": 0.055248618784530384
+        },
+        {
+          "split": "test_unseen",
+          "n": 615,
+          "n_pos": 217,
+          "n_neg": 398,
+          "roc_auc": 0.9996410624551327,
+          "pr_auc": 0.999394349831836,
+          "threshold": 0.029788590967655182,
+          "recall": 0.9953917050691244,
+          "fpr": 0.01256281407035176,
+          "precision": 0.9773755656108597,
+          "recall_on_hard_negatives_fpr": 0.023121387283236993
+        },
+        {
+          "split": "test_human",
+          "n": 468,
+          "n_pos": 66,
+          "n_neg": 402,
+          "roc_auc": 0.9387908940147746,
+          "pr_auc": 0.8913882563328537,
+          "threshold": 0.029788590967655182,
+          "recall": 0.803030303030303,
+          "fpr": 0.02736318407960199,
+          "precision": 0.828125,
+          "recall_on_hard_negatives_fpr": 0.05128205128205128
+        }
+      ],
+      "recall_by_family": {
+        "conversation_forgery": {
+          "n": 30,
+          "caught": 30,
+          "recall": 1.0
+        },
+        "corpus": {
+          "n": 66,
+          "caught": 53,
+          "recall": 0.803
+        },
+        "delimiter_breakout": {
+          "n": 31,
+          "caught": 31,
+          "recall": 1.0
+        },
+        "fake_authority": {
+          "n": 25,
+          "caught": 25,
+          "recall": 1.0
+        },
+        "label_naming": {
+          "n": 85,
+          "caught": 84,
+          "recall": 0.988
+        },
+        "schema_forgery": {
+          "n": 47,
+          "caught": 47,
+          "recall": 1.0
+        },
+        "self_reference": {
+          "n": 9,
+          "caught": 9,
+          "recall": 1.0
+        },
+        "ticket_reference": {
+          "n": 38,
+          "caught": 38,
+          "recall": 1.0
+        },
+        "trailing_directive": {
+          "n": 27,
+          "caught": 27,
+          "recall": 1.0
+        },
+        "unicode_evasion": {
+          "n": 85,
+          "caught": 85,
+          "recall": 1.0
         },
         "vendor_impersonation": {
           "n": 37,

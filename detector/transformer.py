@@ -115,6 +115,24 @@ class TransformerDetector:
             log(f"  kept the epoch with val PR-AUC {best_ap:.4f}")
         return self
 
+    def save(self, directory) -> None:
+        """Persist the fine-tuned weights so analysis does not require a
+        second ten-minute-per-epoch CPU run."""
+        from pathlib import Path
+
+        d = Path(directory)
+        d.mkdir(parents=True, exist_ok=True)
+        assert self._model is not None and self._tok is not None, "fit() first"
+        self._model.save_pretrained(d)
+        self._tok.save_pretrained(d)
+
+    @classmethod
+    def load(cls, directory) -> "TransformerDetector":
+        obj = cls()
+        obj._tok = AutoTokenizer.from_pretrained(directory)
+        obj._model = AutoModelForSequenceClassification.from_pretrained(directory)
+        return obj
+
     @torch.no_grad()
     def score(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
         assert self._model is not None and self._tok is not None, "fit() first"

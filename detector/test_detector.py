@@ -97,6 +97,22 @@ def test_threshold_keeps_to_the_false_positive_budget():
         assert achieved <= target + 1e-9, f"target {target}, achieved {achieved}"
 
 
+def test_matched_fpr_recall_is_measured_at_the_budget():
+    """The matched-FPR number exists so two models can be compared at the same
+    false-positive rate. It is worthless if it does not actually hit the rate."""
+    from detector.metrics import evaluate
+
+    rng = np.random.default_rng(3)
+    scores = np.concatenate([rng.uniform(0, 0.7, 400), rng.uniform(0.3, 1.0, 400)])
+    labels = np.array([0] * 400 + [1] * 400)
+    r = evaluate("synthetic", scores, labels, threshold=0.99, matched_fpr=0.01)
+    achieved = float((scores[labels == 0] >= r.matched_fpr_threshold).mean())
+    assert achieved <= 0.01 + 1e-9
+    # And it must be a real improvement over the deliberately silly threshold
+    # passed in, or the two numbers are not measuring different things.
+    assert r.matched_fpr_recall > r.recall
+
+
 def test_length_control_sees_only_length():
     """Two strings of identical length and token count must score identically,
     whatever they say. If this ever fails the control has become a real model

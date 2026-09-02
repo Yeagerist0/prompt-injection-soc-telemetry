@@ -32,6 +32,13 @@ class Report:
     fpr: float
     precision: float
     recall_on_hard_negatives_fpr: float
+    # Recall when the threshold is refitted on this split's own negatives to
+    # hit the budget exactly. It is an oracle number - a deployment cannot see
+    # the test set - and it exists only so two models can be compared at the
+    # same false-positive rate. Comparing recall across models whose achieved
+    # FPRs differ by 3x is comparing nothing.
+    matched_fpr_recall: float
+    matched_fpr_threshold: float
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -40,7 +47,8 @@ class Report:
         return (
             f"{self.split:<12} n={self.n:<5} ROC {self.roc_auc:.3f}  PR {self.pr_auc:.3f}  "
             f"recall {self.recall:.3f}  FPR {self.fpr:.3f}  "
-            f"FPR(hard neg) {self.recall_on_hard_negatives_fpr:.3f}"
+            f"FPR(hard neg) {self.recall_on_hard_negatives_fpr:.3f}  "
+            f"recall@matched-1%FPR {self.matched_fpr_recall:.3f}"
         )
 
 
@@ -67,6 +75,7 @@ def evaluate(
     labels: np.ndarray,
     threshold: float,
     hard_negative_mask: np.ndarray | None = None,
+    matched_fpr: float = 0.01,
 ) -> Report:
     labels = np.asarray(labels)
     scores = np.asarray(scores, dtype=float)
@@ -80,6 +89,9 @@ def evaluate(
     if hard_negative_mask is not None and hard_negative_mask.any():
         hard_fpr = float(predicted[hard_negative_mask].mean())
 
+    matched_t = threshold_at_fpr(scores, labels, matched_fpr)
+    matched_recall = float((scores[pos] >= matched_t).mean()) if pos.any() else float("nan")
+
     return Report(
         split=split_name,
         n=len(labels),
@@ -92,4 +104,6 @@ def evaluate(
         fpr=fp / max(1, int(neg.sum())),
         precision=tp / max(1, tp + fp),
         recall_on_hard_negatives_fpr=hard_fpr,
+        matched_fpr_recall=matched_recall,
+        matched_fpr_threshold=float(matched_t),
     )

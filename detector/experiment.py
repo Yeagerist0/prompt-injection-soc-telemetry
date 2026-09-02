@@ -31,6 +31,7 @@ from detector.dataset import Split, build, summarise
 from detector.metrics import Report, evaluate, threshold_at_fpr
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
+ARTIFACT_DIR = Path(__file__).resolve().parent / "artifacts"
 TARGET_FPR = 0.01
 TEST_SPLITS = ("test_seen", "test_unseen", "test_human")
 
@@ -39,7 +40,7 @@ def _hard_mask(split: Split) -> np.ndarray:
     return np.array([e.source == "benign_hard" for e in split.examples])
 
 
-def _run_model(model, splits: dict[str, Split], log=print) -> dict:
+def _run_model(model, splits: dict[str, Split], log=print, scores_out: dict | None = None) -> dict:
     val = splits["val"]
     val_scores = model.score(val.texts)
     threshold = threshold_at_fpr(val_scores, np.array(val.labels), TARGET_FPR)
@@ -52,6 +53,12 @@ def _run_model(model, splits: dict[str, Split], log=print) -> dict:
         split = splits[name]
         scores = model.score(split.texts)
         reports.append(evaluate(name, scores, np.array(split.labels), threshold, _hard_mask(split)))
+        if scores_out is not None:
+            scores_out.setdefault(name, []).extend(
+                {"model": model.name, "text": ex.text, "label": ex.label,
+                 "source": ex.source, "field": ex.field, "score": round(float(scores[i]), 6)}
+                for i, ex in enumerate(split.examples)
+            )
         for i, ex in enumerate(split.examples):
             if ex.label == 1:
                 bucket = per_family.setdefault(ex.source, {"n": 0, "caught": 0})
@@ -79,6 +86,7 @@ def main() -> None:
     args = ap.parse_args()
 
     splits = build(seed=args.seed)
+    scores_out: dict[str, list] = {}
     print(summarise(splits))
     print()
 
@@ -91,7 +99,7 @@ def main() -> None:
         t0 = time.time()
         model.fit(train.texts, train.labels)
         print(f"    fit in {time.time() - t0:.1f}s")
-        results.append(_run_model(model, splits))
+        results.append(_run_model(model, splits, scores_out=scores_out))
         print()
 
     if not args.fast:
@@ -102,7 +110,9 @@ def main() -> None:
         t0 = time.time()
         model.fit(train.texts, train.labels, val.texts, val.labels)
         print(f"    fit in {time.time() - t0:.1f}s")
-        results.append(_run_model(model, splits))
+        results.append(_run_model(model, splits, scores_out=scores_out))
+        model.save(ARTIFACT_DIR / model.name)
+        print(f"    saved weights to {ARTIFACT_DIR / model.name}")
         print()
 
     RESULTS_DIR.mkdir(exist_ok=True)
@@ -117,7 +127,11 @@ def main() -> None:
         "held_out_families": list(__import__("detector.families", fromlist=["HELD_OUT"]).HELD_OUT),
         "results": results,
     }, indent=2))
+    scores_path = RESULTS_DIR / f"scores_{stamp}.json"
+    scores_path.write_text(json.dumps({"generated_at": stamp, "threshold_target_fpr": TARGET_FPR,
+                                       "splits": scores_out}, indent=1))
     print(f"wrote {out}")
+    print(f"wrote {scores_path}")
 
 
 if __name__ == "__main__":
