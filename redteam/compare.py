@@ -43,6 +43,15 @@ def _per_goal(run: dict) -> dict[str, dict]:
 
 def report(control: dict, target: dict) -> str:
     lines = []
+    cv, tv = control.get("judge_version"), target.get("judge_version")
+    if cv != tv:
+        lines.append(
+            f"  REFUSING TO COMPARE: control scored by judge v{cv}, target by judge v{tv}.\n"
+            "  A scoring rule changed between the two runs, so their bypass counts are\n"
+            "  not the same measurement. Re-run one of them, or re-judge both from their\n"
+            "  saved narrations, before reading anything into the difference."
+        )
+        return "\n".join(lines)
     c_conf = control["confirmed_bypasses"]
     t_conf = target["confirmed_bypasses"]
 

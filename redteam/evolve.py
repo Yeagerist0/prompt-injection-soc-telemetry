@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from eval import judge
+from eval.judge import JUDGE_VERSION
 from eval.harness import TIERS, resolve_base_incident, splice_payload
 from injection_corpus.loader import Payload, load_corpus
 from narrator.backends import get_client
@@ -222,7 +223,7 @@ def main() -> None:
                 "goal": ind.goal, "field": ind.field, "payload": ind.payload,
                 "reason": ind.reason, "generation": ind.generation,
                 "rediscovery": is_rediscovery(ind.payload, corpus_shingles),
-                "narration": check.output[:600],
+                "narration": check.output,
             })
 
     novel = [w for w in winners if not w["rediscovery"]]
@@ -236,8 +237,13 @@ def main() -> None:
         "calls_used": budget.used, "elapsed_s": round(time.time() - started, 1),
         "evaluated": len(everything), "distinct_payloads": len(cache),
         "confirmed_bypasses": len(winners), "confirmed_novel": len(novel),
+        # Full narrations, not excerpts. A truncated narration names fewer
+        # entities, so re-judging a saved run from disk - the whole point of
+        # keeping it - would read truncation as an entity_omission bypass.
+        # Same reason eval/run_all.py stores complete outputs.
+        "judge_version": JUDGE_VERSION,
         "winners": winners,
-        "attempts": [asdict(i) | {"output": i.output[:400]} for i in everything],
+        "attempts": [asdict(i) for i in everything],
     }, indent=1))
 
     print(f"\nevaluated {len(everything)} ({len(cache)} distinct)  "

@@ -144,3 +144,16 @@ def test_comparing_without_a_control_is_an_error_not_a_summary(tmp_path, monkeyp
     monkeypatch.setattr("sys.argv", ["compare"])
     with pytest.raises(SystemExit, match="no naive control"):
         compare.main()
+
+
+def test_runs_scored_by_different_judges_are_not_compared():
+    """Changing a scoring rule between two runs makes their counts different
+    measurements. Silently differencing them is how a judge change gets
+    reported as a defense result."""
+    from redteam.compare import report
+
+    a, b = _fake_run("naive", 3), _fake_run("hardened", 0)
+    a["judge_version"], b["judge_version"] = 2, 3
+    out = report(a, b)
+    assert "REFUSING TO COMPARE" in out
+    assert "TIER HELD" not in out

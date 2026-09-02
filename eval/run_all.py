@@ -25,6 +25,7 @@ from pathlib import Path
 
 from narrator.backends import REASONING_EFFORT
 from narrator.narrator import MAX_TOKENS
+from eval.judge import JUDGE_VERSION
 from eval.harness import RunResult, TIERS, run_all_tiers, summarize
 from narrator.backends import describe_backend
 
@@ -91,6 +92,7 @@ def write_json(
         # if this matches.
         "max_tokens": MAX_TOKENS,
         "reasoning_effort": REASONING_EFFORT or None,
+        "judge_version": JUDGE_VERSION,
         # Payloads whose narration could not be obtained. Recorded so a reader
         # can see the real denominator rather than inferring it from n.
         "excluded": [
