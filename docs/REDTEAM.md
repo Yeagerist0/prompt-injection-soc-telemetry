@@ -80,6 +80,31 @@ temperature 0 — `docs/RESULTS.md` records a truncation that happened on one
 attempt and not the next. Every winner is re-run and re-judged with a fresh
 call before it is reported.
 
+## The control that makes a null result readable
+
+A search that finds nothing against the prompt-hardened tier has two possible
+explanations, and they look identical in the output: the tier holds, or the
+search does not work.
+
+So every run against a defended tier has to be paired with the same search
+against **naive**, which the hand-written corpus already beats 22.7% of the
+time on `gemini-3.1-flash-lite`. That is the positive control:
+
+- Search beats naive, not hardened → the search works and the tier held. A
+  real result.
+- Search beats neither → the search is broken, or the operators are wrong for
+  this target. Says nothing about the defense, and must not be reported as if
+  it did.
+
+```
+python -m redteam.evolve --tier naive     --generations 4 --population 10   # control
+python -m redteam.evolve --tier hardened  --generations 4 --population 10   # the question
+```
+
+Report both or neither. A null against a defended tier with no control beside
+it is the same mistake as a probe scoring 100% at layer 0 — a number that
+looks like a finding until you check the instrument.
+
 ## Running it
 
 ```
