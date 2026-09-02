@@ -126,6 +126,50 @@ landed nothing on tier 2 on either model. Either those mechanics hold, or the
 attacks were not good enough — n=9 cannot tell those apart, and the corpus
 has not found the ceiling.
 
+## The renderer's coverage gap is free to close
+
+The structural tier's entire measured bypass rate is one renderer property:
+`process_metadata` payloads land on the incident's `DNS_QUERY` event, whose
+template renders only `dns_name`, so the process name never reaches the
+analyst. The obvious question is what widening that coverage costs, since the
+allow-listed rendering is what makes the tier safe.
+
+`python -m eval.coverage` sweeps it. No model calls are needed: the tier's
+only model output is one label per event, and every saved report already
+contains them (`- [malicious_activity] ...`), so the labels are parsed back out
+and the incidents re-rendered at each coverage level. Real classifications from
+both measured models, for free.
+
+| coverage | bypass | severity_downgrade | entity_omission | instruction_leak | evidence retained | attacker chars/report |
+|---|---|---|---|---|---|---|
+| `minimal` (today) | 7.6% | 0% | 33% | 0% | 98.6% | 310 |
+| `attributed` (+`proc_image` everywhere) | **0.0%** | 0% | **0%** | 0% | **100%** | 324 |
+| `full` (every populated field) | **0.0%** | 0% | **0%** | 0% | **100%** | 324 |
+
+Identical on `gemini-3.1-flash-lite` and `meta/llama-3.1-8b-instruct`, as it
+must be — the sweep is deterministic given each model's saved labels.
+
+There is no tradeoff to trade. Rendering the process behind every event takes
+the structural tier to **0% on all three attacker goals on both models**, at a
+cost of 14 characters per report.
+
+The reason is architectural, and it is the most useful thing this sweep found.
+In tiers 1 and 2, how much field text you render and how much leverage the
+attacker has over the model are *the same dial* — the rendered text is the
+prompt. In tier 3 they are separate dials. The model classifies from
+`build_structural_prompt(incident)`, which renders every field of every event
+regardless of report coverage, so it has already seen the payload either way.
+Coverage changes only what the analyst is shown. **Structural grounding
+decouples rendering fidelity from model manipulability**, which is what lets
+the fidelity dial go to maximum for free.
+
+Two things this does not say. The 0% is against these 66 payloads, which
+already failed to beat the tier on severity downgrade at any coverage — it is
+the omission channel closing, not a new defense being proven. And
+`attacker_chars_shown` is still worth tracking, because a report containing
+more attacker-controlled prose is more dangerous to whatever reads it *next*;
+the decoupling holds for this narrator, not for a chain of them.
+
 ## Two caveats that matter more than the headline
 
 ### 1. The judge originally scored quoted evidence as a bypass

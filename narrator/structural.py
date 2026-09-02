@@ -70,7 +70,55 @@ _TEMPLATES: dict[EventType, str] = {
 }
 
 
-def render_event_line(event: Event, kind: ObservationKind) -> str:
+class Coverage(str, Enum):
+    """How many of an event's attacker-controlled fields the report shows.
+
+    The per-event-type templates are what make this tier safe - the model
+    cannot write into the report, it can only pick a label - but they are also
+    what makes it lossy. A `DNS_QUERY` event carries a `proc_image`, and the
+    DNS template renders only `dns_name`, so the process that made the query
+    never reaches the analyst no matter what it is called. That is the whole
+    of the tier's measured `entity_omission` rate.
+
+    Widening coverage is not a weakening of the defense: every field is still
+    rendered by fixed trusted code into a fixed template, and the model still
+    only chooses a label. What changes is how much attacker-controlled text
+    the analyst is shown - more evidence, and more injected prose in front of
+    whatever reads the report next. `eval/coverage.py` measures both sides.
+    """
+
+    MINIMAL = "minimal"        # today's behaviour: the per-type template only
+    ATTRIBUTED = "attributed"  # + proc_image on every event that has one
+    FULL = "full"              # + every populated attacker-controlled field
+
+
+# Ordered so the rendered suffix is stable regardless of dataclass field order.
+_ATTACKER_FIELDS = ("proc_image", "proc_cmdline", "file_path", "dns_name",
+                    "registry_key", "user_agent")
+
+
+def _extra_fields(event: Event, base_line: str, coverage: Coverage) -> list[str]:
+    """Populated attacker-controlled fields the base template did not show.
+
+    Presence is checked by substring rather than by event type, so a template
+    that already includes a field is never duplicated and a template that
+    changes shape later does not silently start double-rendering.
+    """
+    if coverage is Coverage.MINIMAL:
+        return []
+    wanted = ("proc_image",) if coverage is Coverage.ATTRIBUTED else _ATTACKER_FIELDS
+    return [
+        f"{name}={value}"
+        for name in wanted
+        if (value := getattr(event, name, "")) and value not in base_line
+    ]
+
+
+def render_event_line(
+    event: Event,
+    kind: ObservationKind,
+    coverage: Coverage = Coverage.MINIMAL,
+) -> str:
     """Render one event's line using a fixed, per-event-type template. The
     model never authors this text - it only chose `kind`."""
     cmdline_suffix = f' (cmdline: "{event.proc_cmdline}")' if event.proc_cmdline else ""
@@ -86,6 +134,9 @@ def render_event_line(event: Event, kind: ObservationKind) -> str:
         registry_key=event.registry_key,
         user_agent=event.user_agent,
     )
+    extra = _extra_fields(event, line, coverage)
+    if extra:
+        line = f"{line} [{'; '.join(extra)}]"
     return f"- [{kind.value}] {line}"
 
 
@@ -127,7 +178,11 @@ def validate_classifications(incident: Incident, raw_classifications: list[dict]
     return validated
 
 
-def render_structural_report(incident: Incident, classifications: dict[str, ObservationKind]) -> str:
+def render_structural_report(
+    incident: Incident,
+    classifications: dict[str, ObservationKind],
+    coverage: Coverage = Coverage.MINIMAL,
+) -> str:
     """Render the full report: a trusted header (risk score, technique set -
     never asked of the LLM) followed by every event, in order, using its
     validated classification (or UNCLASSIFIED if none survived validation)."""
@@ -140,7 +195,7 @@ def render_structural_report(incident: Incident, classifications: dict[str, Obse
     ]
     for event in incident.events:
         kind = classifications.get(event.id, ObservationKind.UNCLASSIFIED)
-        lines.append(render_event_line(event, kind))
+        lines.append(render_event_line(event, kind, coverage))
     return "\n".join(lines)
 
 
@@ -149,8 +204,17 @@ def narrate_structural(
     *,
     client: Any | None = None,
     model: str = DEFAULT_MODEL,
+    coverage: Coverage = Coverage.MINIMAL,
 ) -> str:
-    """Summarize an incident using the structurally-grounded prompt path."""
+    """Summarize an incident using the structurally-grounded prompt path.
+
+    `coverage` changes only what the rendered report shows. The model is
+    classifying from `build_structural_prompt(incident)`, which renders every
+    field of every event whatever this is set to, so widening coverage gives
+    the attacker no additional leverage over the classification - see
+    `eval/coverage.py`. The default stays MINIMAL so every number already in
+    docs/RESULTS.md keeps meaning what it says.
+    """
     client = client or get_client()
     response = client.messages.create(
         model=model,
@@ -162,4 +226,4 @@ def narrate_structural(
     text = "".join(block.text for block in response.content if block.type == "text")
     raw_classifications = json.loads(text).get("classifications", [])
     classifications = validate_classifications(incident, raw_classifications)
-    return render_structural_report(incident, classifications)
+    return render_structural_report(incident, classifications, coverage)
