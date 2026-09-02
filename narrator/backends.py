@@ -40,6 +40,15 @@ from typing import Any
 # requests/minute on some models). A 198-call run that dies at call 40 with a
 # 429 is a wasted run, so pace and retry rather than sprint and fail.
 DEFAULT_RPM = int(os.environ.get("NARRATOR_RPM", "0"))
+
+# Newer models spend tokens thinking before they answer, which is a second
+# variable in any cross-model comparison: a bypass rate that moves between two
+# models tells you nothing if one of them was also given a reasoning budget and
+# the other was not. Setting NARRATOR_REASONING_EFFORT=none puts every model on
+# the same footing (and takes a gemini-3.5-flash narration from ~25s to ~4s).
+# Empty means "send nothing and take the provider's default", which is what the
+# runs already in docs/RESULTS.md did.
+REASONING_EFFORT = os.environ.get("NARRATOR_REASONING_EFFORT", "").strip()
 MAX_RETRIES = int(os.environ.get("NARRATOR_MAX_RETRIES", "6"))
 TIMEOUT_S = float(os.environ.get("NARRATOR_TIMEOUT", "120"))
 
@@ -194,6 +203,8 @@ class _OpenAICompatMessages:
             }
             if response_format is not None:
                 body["response_format"] = response_format
+            if REASONING_EFFORT:
+                body["reasoning_effort"] = REASONING_EFFORT
             try:
                 text = self._send(body)
             except BackendError as exc:

@@ -23,6 +23,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from narrator.backends import REASONING_EFFORT
 from narrator.narrator import MAX_TOKENS
 from eval.harness import RunResult, TIERS, run_all_tiers, summarize
 from narrator.backends import describe_backend
@@ -89,6 +90,7 @@ def write_json(
         # which the judge would score as a bypass. Two runs are only comparable
         # if this matches.
         "max_tokens": MAX_TOKENS,
+        "reasoning_effort": REASONING_EFFORT or None,
         # Payloads whose narration could not be obtained. Recorded so a reader
         # can see the real denominator rather than inferring it from n.
         "excluded": [
