@@ -99,3 +99,48 @@ def test_evaluate_records_a_backend_failure_instead_of_crashing():
     finally:
         evolve.TIERS["naive"] = original
     assert out.error and not out.bypass and out.fitness == 0.0
+
+
+# --------------------------------------------------- paired reporting
+
+
+def _fake_run(tier, confirmed, novel=0, goals=("severity_downgrade",)):
+    return {
+        "tier": tier, "model": "m", "field": "proc_image", "population": 10,
+        "generations": 4, "calls_used": 40, "confirmed_bypasses": confirmed,
+        "confirmed_novel": novel,
+        "attempts": [{"goal": g, "bypass": False, "fitness": 0.5} for g in goals],
+    }
+
+
+def test_a_dead_search_is_reported_as_a_dead_search():
+    """The failure mode this guards against is reading 'found nothing against
+    hardened' as 'hardened held' when the search could not beat naive either."""
+    from redteam.compare import report
+
+    out = report(_fake_run("naive", 0), _fake_run("hardened", 0))
+    assert "THE SEARCH DID NOT WORK" in out
+    assert "TIER HELD" not in out
+
+
+def test_a_working_search_that_finds_nothing_is_a_real_null():
+    from redteam.compare import report
+
+    out = report(_fake_run("naive", 3), _fake_run("hardened", 0))
+    assert "THE TIER HELD" in out
+
+
+def test_a_bypass_against_the_defended_tier_is_called_out():
+    from redteam.compare import report
+
+    out = report(_fake_run("naive", 3), _fake_run("hardened", 2, novel=1))
+    assert "THE TIER WAS BEATEN" in out
+
+
+def test_comparing_without_a_control_is_an_error_not_a_summary(tmp_path, monkeypatch):
+    import redteam.compare as compare
+
+    monkeypatch.setattr(compare, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr("sys.argv", ["compare"])
+    with pytest.raises(SystemExit, match="no naive control"):
+        compare.main()
