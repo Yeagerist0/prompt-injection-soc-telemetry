@@ -1,0 +1,324 @@
+{
+  "generated_at": "20260902T090712Z",
+  "seed": 20260902,
+  "target_fpr": 0.01,
+  "splits": {
+    "train": {
+      "n": 1870,
+      "n_pos": 910,
+      "lengths": {
+        "injected": {
+          "n": 910,
+          "mean": 78.7,
+          "median": 77.5
+        },
+        "benign": {
+          "n": 960,
+          "mean": 49.2,
+          "median": 42.0
+        }
+      }
+    },
+    "val": {
+      "n": 450,
+      "n_pos": 210,
+      "lengths": {
+        "injected": {
+          "n": 210,
+          "mean": 78.5,
+          "median": 77.0
+        },
+        "benign": {
+          "n": 240,
+          "mean": 50.6,
+          "median": 45.0
+        }
+      }
+    },
+    "test_seen": {
+      "n": 584,
+      "n_pos": 197,
+      "lengths": {
+        "injected": {
+          "n": 197,
+          "mean": 75.4,
+          "median": 74
+        },
+        "benign": {
+          "n": 387,
+          "mean": 46.0,
+          "median": 42
+        }
+      }
+    },
+    "test_unseen": {
+      "n": 615,
+      "n_pos": 217,
+      "lengths": {
+        "injected": {
+          "n": 217,
+          "mean": 63.8,
+          "median": 60
+        },
+        "benign": {
+          "n": 398,
+          "mean": 44.5,
+          "median": 39.0
+        }
+      }
+    },
+    "test_human": {
+      "n": 468,
+      "n_pos": 66,
+      "lengths": {
+        "injected": {
+          "n": 66,
+          "mean": 72.4,
+          "median": 68.0
+        },
+        "benign": {
+          "n": 402,
+          "mean": 47.0,
+          "median": 41.0
+        }
+      }
+    }
+  },
+  "held_out_families": [
+    "schema_forgery",
+    "label_naming",
+    "unicode_evasion"
+  ],
+  "results": [
+    {
+      "model": "length_only_control",
+      "threshold": 0.9103003813700739,
+      "reports": [
+        {
+          "split": "val",
+          "n": 450,
+          "n_pos": 210,
+          "n_neg": 240,
+          "roc_auc": 0.8793353174603173,
+          "pr_auc": 0.8150371661554093,
+          "threshold": 0.9103003813700739,
+          "recall": 0.08095238095238096,
+          "fpr": 0.0,
+          "precision": 1.0,
+          "recall_on_hard_negatives_fpr": 0.0
+        },
+        {
+          "split": "test_seen",
+          "n": 584,
+          "n_pos": 197,
+          "n_neg": 387,
+          "roc_auc": 0.8777528561497396,
+          "pr_auc": 0.7239959511601876,
+          "threshold": 0.9103003813700739,
+          "recall": 0.08121827411167512,
+          "fpr": 0.00516795865633075,
+          "precision": 0.8888888888888888,
+          "recall_on_hard_negatives_fpr": 0.011049723756906077
+        },
+        {
+          "split": "test_unseen",
+          "n": 615,
+          "n_pos": 217,
+          "n_neg": 398,
+          "roc_auc": 0.7358103883472662,
+          "pr_auc": 0.48576001057938945,
+          "threshold": 0.9103003813700739,
+          "recall": 0.0,
+          "fpr": 0.0,
+          "precision": 0.0,
+          "recall_on_hard_negatives_fpr": 0.0
+        },
+        {
+          "split": "test_human",
+          "n": 468,
+          "n_pos": 66,
+          "n_neg": 402,
+          "roc_auc": 0.7426315392733303,
+          "pr_auc": 0.3991143841472461,
+          "threshold": 0.9103003813700739,
+          "recall": 0.16666666666666666,
+          "fpr": 0.007462686567164179,
+          "precision": 0.7857142857142857,
+          "recall_on_hard_negatives_fpr": 0.015384615384615385
+        }
+      ],
+      "recall_by_family": {
+        "conversation_forgery": {
+          "n": 30,
+          "caught": 1,
+          "recall": 0.033
+        },
+        "corpus": {
+          "n": 66,
+          "caught": 11,
+          "recall": 0.167
+        },
+        "delimiter_breakout": {
+          "n": 31,
+          "caught": 0,
+          "recall": 0.0
+        },
+        "fake_authority": {
+          "n": 25,
+          "caught": 0,
+          "recall": 0.0
+        },
+        "label_naming": {
+          "n": 85,
+          "caught": 0,
+          "recall": 0.0
+        },
+        "schema_forgery": {
+          "n": 47,
+          "caught": 0,
+          "recall": 0.0
+        },
+        "self_reference": {
+          "n": 9,
+          "caught": 1,
+          "recall": 0.111
+        },
+        "ticket_reference": {
+          "n": 38,
+          "caught": 8,
+          "recall": 0.211
+        },
+        "trailing_directive": {
+          "n": 27,
+          "caught": 0,
+          "recall": 0.0
+        },
+        "unicode_evasion": {
+          "n": 85,
+          "caught": 0,
+          "recall": 0.0
+        },
+        "vendor_impersonation": {
+          "n": 37,
+          "caught": 6,
+          "recall": 0.162
+        }
+      }
+    },
+    {
+      "model": "char_ngram_lr",
+      "threshold": 0.3856179813333583,
+      "reports": [
+        {
+          "split": "val",
+          "n": 450,
+          "n_pos": 210,
+          "n_neg": 240,
+          "roc_auc": 1.0,
+          "pr_auc": 0.9999999999999999,
+          "threshold": 0.3856179813333583,
+          "recall": 1.0,
+          "fpr": 0.008333333333333333,
+          "precision": 0.9905660377358491,
+          "recall_on_hard_negatives_fpr": 0.020618556701030927
+        },
+        {
+          "split": "test_seen",
+          "n": 584,
+          "n_pos": 197,
+          "n_neg": 387,
+          "roc_auc": 1.0,
+          "pr_auc": 1.0,
+          "threshold": 0.3856179813333583,
+          "recall": 1.0,
+          "fpr": 0.0,
+          "precision": 1.0,
+          "recall_on_hard_negatives_fpr": 0.0
+        },
+        {
+          "split": "test_unseen",
+          "n": 615,
+          "n_pos": 217,
+          "n_neg": 398,
+          "roc_auc": 0.9979968969270314,
+          "pr_auc": 0.997087543780498,
+          "threshold": 0.3856179813333583,
+          "recall": 0.9585253456221198,
+          "fpr": 0.0,
+          "precision": 1.0,
+          "recall_on_hard_negatives_fpr": 0.0
+        },
+        {
+          "split": "test_human",
+          "n": 468,
+          "n_pos": 66,
+          "n_neg": 402,
+          "roc_auc": 0.9651741293532338,
+          "pr_auc": 0.9225665651347248,
+          "threshold": 0.3856179813333583,
+          "recall": 0.7575757575757576,
+          "fpr": 0.0,
+          "precision": 1.0,
+          "recall_on_hard_negatives_fpr": 0.0
+        }
+      ],
+      "recall_by_family": {
+        "conversation_forgery": {
+          "n": 30,
+          "caught": 30,
+          "recall": 1.0
+        },
+        "corpus": {
+          "n": 66,
+          "caught": 50,
+          "recall": 0.758
+        },
+        "delimiter_breakout": {
+          "n": 31,
+          "caught": 31,
+          "recall": 1.0
+        },
+        "fake_authority": {
+          "n": 25,
+          "caught": 25,
+          "recall": 1.0
+        },
+        "label_naming": {
+          "n": 85,
+          "caught": 84,
+          "recall": 0.988
+        },
+        "schema_forgery": {
+          "n": 47,
+          "caught": 47,
+          "recall": 1.0
+        },
+        "self_reference": {
+          "n": 9,
+          "caught": 9,
+          "recall": 1.0
+        },
+        "ticket_reference": {
+          "n": 38,
+          "caught": 38,
+          "recall": 1.0
+        },
+        "trailing_directive": {
+          "n": 27,
+          "caught": 27,
+          "recall": 1.0
+        },
+        "unicode_evasion": {
+          "n": 85,
+          "caught": 77,
+          "recall": 0.906
+        },
+        "vendor_impersonation": {
+          "n": 37,
+          "caught": 37,
+          "recall": 1.0
+        }
+      }
+    }
+  ]
+}

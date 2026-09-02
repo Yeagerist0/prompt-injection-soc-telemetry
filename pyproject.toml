@@ -12,21 +12,25 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# The learned detector (detector/) is optional: it pulls torch and transformers,
+# which the three narrator tiers and the eval harness do not need.
+detector = ["torch>=2.4", "transformers>=4.44", "scikit-learn>=1.4", "numpy>=1.26"]
 
 [project.scripts]
 pi-eval = "eval.run_all:main"
 pi-dashboard = "eval.dashboard:main"
+pi-detector = "detector.experiment:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["telemetry", "injection_corpus", "narrator", "narrator.prompts", "eval"]
+packages = ["telemetry", "injection_corpus", "narrator", "narrator.prompts", "eval", "detector"]
 
 [tool.setuptools.package-data]
 injection_corpus = ["*.yaml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["telemetry", "injection_corpus", "narrator", "eval"]
+testpaths = ["telemetry", "injection_corpus", "narrator", "eval", "detector"]
