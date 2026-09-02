@@ -228,3 +228,38 @@ def test_complete_completion_is_returned(monkeypatch):
     client = OpenAICompatClient(api_key="k", base_url="https://example.test/v1")
     r = client.messages.create(model="m", max_tokens=64, messages=[{"role": "user", "content": "U"}])
     assert r.content[0].text == "done."
+
+
+def test_rate_limit_backoff_is_much_longer_than_a_transient_error():
+    """A 429 needs the quota window to elapse. Backing off on the same
+    one-second-exponential schedule as a 503 gives up after about a minute and
+    leaves the run with excluded payloads, which silently changes the
+    denominator of every rate the run reports."""
+    import urllib.error
+
+    from narrator.backends import _retry_delay
+
+    class E(urllib.error.HTTPError):
+        def __init__(self, code, headers=None):
+            self.code = code
+            self.headers = headers or {}
+
+    for attempt in range(4):
+        assert _retry_delay(E(429), attempt) > _retry_delay(E(503), attempt)
+    assert _retry_delay(E(429), 0) >= 30
+    assert _retry_delay(E(429), 9) <= 300
+
+
+def test_retry_after_header_wins_when_the_server_sends_one():
+    import urllib.error
+
+    from narrator.backends import _retry_delay
+
+    class E(urllib.error.HTTPError):
+        def __init__(self, code, headers):
+            self.code = code
+            self.headers = headers
+
+    assert _retry_delay(E(429, {"Retry-After": "12"}), 3) == 13.0
+    # A malformed header must fall back rather than raise mid-run.
+    assert _retry_delay(E(429, {"Retry-After": "soon"}), 0) >= 30

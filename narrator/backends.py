@@ -146,6 +146,34 @@ def _hard_deadline(seconds: float):
         signal.signal(signal.SIGALRM, previous)
 
 
+def _retry_delay(exc, attempt: int) -> float:
+    """How long to wait before retrying.
+
+    429 is not a transient blip like a 503 - it means the quota window has to
+    actually elapse, and the exponential-from-one-second schedule used for
+    everything else gives up after about a minute. That turns a rate-limited
+    run into a run with holes in it, and a hole is not neutral: `run_corpus`
+    excludes the payload, so the corpus quietly shrinks and every rate is
+    computed over a different denominator than the one it claims.
+
+    Honours Retry-After when the server sends one, since that is the only
+    authoritative answer.
+    """
+    if exc.code != 429:
+        return min(2**attempt, 60)
+    header = None
+    try:
+        header = exc.headers.get("Retry-After")
+    except Exception:
+        pass
+    if header:
+        try:
+            return min(float(header) + 1, 300)
+        except ValueError:
+            pass
+    return min(30 * (2**attempt), 300)
+
+
 def _post_json(url: str, headers: dict[str, str], body: dict[str, Any]) -> dict[str, Any]:
     request = urllib.request.Request(
         url,
@@ -260,12 +288,14 @@ class _OpenAICompatMessages:
                     raise BackendError(f"HTTP {exc.code} - check NARRATOR_API_KEY: {detail}") from exc
                 if attempt == MAX_RETRIES - 1:
                     raise BackendError(f"HTTP {exc.code} after {MAX_RETRIES} attempts: {detail}") from exc
+                delay = _retry_delay(exc, attempt)
                 print(
-                    f"  [backend] HTTP {exc.code}, backing off ({attempt + 1}/{MAX_RETRIES})",
+                    f"  [backend] HTTP {exc.code}, backing off {delay:.0f}s "
+                    f"({attempt + 1}/{MAX_RETRIES})",
                     file=sys.stderr,
                     flush=True,
                 )
-                time.sleep(min(2**attempt, 60))
+                time.sleep(delay)
                 continue
             except urllib.error.URLError as exc:
                 if attempt == MAX_RETRIES - 1:
