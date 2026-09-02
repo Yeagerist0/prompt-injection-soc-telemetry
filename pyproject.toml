@@ -12,6 +12,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Inspect AI packaging of the same benchmark, for the inspect_evals register.
+# The task reuses eval.judge unchanged, so it reports the same numbers as the
+# offline harness in docs/RESULTS.md.
+inspect = ["inspect_ai>=0.3.100"]
 # The learned detector (detector/) is optional: it pulls torch and transformers,
 # which the three narrator tiers and the eval harness do not need.
 detector = ["torch>=2.4", "transformers>=4.44", "scikit-learn>=1.4", "numpy>=1.26"]
@@ -27,11 +31,11 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["telemetry", "injection_corpus", "narrator", "narrator.prompts", "eval", "detector", "redteam"]
+packages = ["telemetry", "injection_corpus", "narrator", "narrator.prompts", "eval", "detector", "redteam", "inspect_task"]
 
 [tool.setuptools.package-data]
 injection_corpus = ["*.yaml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["telemetry", "injection_corpus", "narrator", "eval", "detector", "redteam"]
+testpaths = ["telemetry", "injection_corpus", "narrator", "eval", "detector", "redteam", "inspect_task"]
