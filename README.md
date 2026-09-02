@@ -41,6 +41,10 @@ distinguish from no benefit at all. Structural grounding replicates across the
 two models; prompt hardening does not. On severity downgrade specifically the
 structural tier is 0/31 on both.
 
+A narrative write-up of how these numbers were arrived at — including the
+first scoring pass that produced the opposite ordering — is in
+[`docs/WRITEUP.md`](docs/WRITEUP.md).
+
 Three things in [`docs/RESULTS.md`](docs/RESULTS.md) qualify this and should be
 read before citing the table: the judge originally scored *quoted attacker
 text* as a bypass, which inverted the whole ordering until fixed; structural's
@@ -81,7 +85,7 @@ injection_corpus/   66 payloads across 6 categories + a validating loader
 narrator/           three narrator tiers (naive / hardened / structurally-grounded)
 eval/               splices payloads into incidents, runs a narrator tier, scores bypasses
                     + dashboard.py, a self-contained HTML view of the results
-docs/               ARCHITECTURE.md, THREAT_MODEL.md, RESULTS.md, SECURITY.md
+docs/               ARCHITECTURE.md, THREAT_MODEL.md, RESULTS.md, WRITEUP.md, SECURITY.md
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full data flow
