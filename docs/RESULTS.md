@@ -41,7 +41,7 @@ rank them against each other. Separating them needs a larger corpus, more
 models, or payloads targeted at where they actually differ.
 
 On the one goal built for it, the structural tier is unambiguous: **it never
-downgraded severity in its own voice, 0 of 66.**
+downgraded severity in its own voice, 0 of the 31 severity-downgrade payloads.**
 
 ## Second model: what replicates and what doesn't
 
