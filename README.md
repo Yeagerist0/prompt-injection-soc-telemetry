@@ -192,6 +192,18 @@ so a provider with weaker structured-output support still gets measured
 rather than scored as a defense failure. Sampling is pinned to
 `temperature=0`: bypass rates that move with sampling noise aren't results.
 
+## Which committed results to cite
+
+`eval/results/run_*.json` contains the original per-payload model outputs. The
+headline table in this README uses the separately committed
+`eval/results/run_20260810T113421Z.rescored.json`, because a later audit fixed
+how quoted attacker-controlled evidence was scored. `docs/RESULTS.md` documents
+that correction and the remaining limitations. The raw run and rescored result
+are intentionally both retained: the latter changes the judge's interpretation
+of the same outputs, not the model generations. When citing a number, use the
+rescored artifact and name the judge correction; do not treat the raw JSON
+summary as the final headline result.
+
 Writes a timestamped `eval/results/run_<UTC-timestamp>.{csv,json}` with
 every individual (tier, payload, bypass_detected, reason) result, and
 prints the summary table. The full 66-payload x 3-tier run is ~198 short
