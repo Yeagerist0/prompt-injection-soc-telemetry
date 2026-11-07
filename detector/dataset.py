@@ -98,6 +98,11 @@ def build(seed: int = 20260902) -> dict[str, Split]:
     val = Split("val")
     val.examples = _injections(TRAIN_FAMILIES, 30, rng) + _benigns(240, rng, "val")
 
+    # The generators can emit identical strings across train and validation.
+    # Validation chooses the operating threshold, so it must be held out too.
+    train_texts = {e.text for e in train.examples}
+    val.examples = [e for e in val.examples if e.text not in train_texts]
+
     seen = Split("test_seen")
     seen.examples = _injections(TRAIN_FAMILIES, 40, rng) + _benigns(600, rng, "test")
 

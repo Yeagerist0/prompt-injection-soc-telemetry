@@ -77,7 +77,7 @@ at the same false-positive rate:
 | TF-IDF char 3-5 grams + LR | 1.000 | 0.986 | **0.833** |
 | distilroberta-base fine-tune | 1.000 | 0.991 | 0.803 |
 
-The transformer takes 370s of CPU and does not beat a baseline that fits in
+The transformer took 617s in the corrected-split rerun and does not beat a baseline that fits in
 0.1s on the only split not written by the same generator as its training data.
 Its validation-fitted threshold also drifts from 0.8% to 2.8% FPR on test,
 which the baseline's does not.

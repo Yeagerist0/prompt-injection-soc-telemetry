@@ -68,6 +68,11 @@ months before this detector existed, for a different purpose, and they are the
 only positives in the project that did not come out of the same generator that
 produced the training data.
 
+Generated injections can repeat exactly across the train and validation
+draws. The split builder removes training strings from validation before
+fitting the threshold, then removes both train and validation strings from
+each test split. `detector/test_detector.py` checks these boundaries.
+
 ### The benign side had to be rebuilt
 
 The first version listed ~15 realistic benign strings per field and mutated
