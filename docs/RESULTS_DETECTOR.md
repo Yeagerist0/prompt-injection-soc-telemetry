@@ -1,8 +1,13 @@
 # Detector results
 
-**Measured 2026-09-02** from `detector/results/detector_20260902T092142Z.json`.
+**Rerun 2026-11-05** from `detector/results/detector_20261105T095438Z.json`.
 Method, splits and protocol are in [`DETECTOR.md`](DETECTOR.md). Nothing here
 is estimated.
+
+The split builder now removes exact training strings from validation. It
+removed 47 duplicate positive examples (450 to 403 validation examples);
+test split sizes and all headline test metrics below stayed the same to the
+shown precision. The old result file remains in the repository for comparison.
 
 ## The headline
 
@@ -47,7 +52,7 @@ in this project that did not come out of the same generator as the training
 data — TF-IDF over character 3-5 grams beats the fine-tuned transformer, and
 has the better ROC-AUC there too (0.965 against 0.939).
 
-The baseline fits in **0.1 seconds**. The fine-tune took **370 seconds** of CPU
+The baseline fits in **0.1 seconds**. The corrected-split fine-tune took **617 seconds** on this CPU
 across three epochs. On this task, at this scale, the honest recommendation is
 to ship the baseline.
 

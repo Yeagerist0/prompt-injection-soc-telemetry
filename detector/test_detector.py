@@ -75,6 +75,11 @@ def test_no_exact_string_leaks_into_a_test_split(splits):
         assert not leaked, f"{name} shares {len(leaked)} strings with train/val"
 
 
+def test_validation_has_no_training_strings(splits):
+    train = {e.text for e in splits["train"].examples}
+    assert train.isdisjoint(e.text for e in splits["val"].examples)
+
+
 def test_test_human_is_the_whole_corpus(splits):
     corpus = {p.payload for p in load_corpus()}
     human = {e.text for e in splits["test_human"].examples if e.label == 1}
